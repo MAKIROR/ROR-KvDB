@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 serde_json = "*"
+failure = "0.1.8"
