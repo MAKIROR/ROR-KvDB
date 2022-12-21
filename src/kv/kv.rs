@@ -12,32 +12,12 @@ use std::{
     }
 }
 use serde::{Serialize, Deserialize}; 
+use super::error::KvError;
 
 pub enum Command {
     Add,
     Get,
     Delete,
-}
-
-pub struct DataStore {
-    path: PathBuf,
-    data: Vec<Entry>,
-}
-
-impl DataStore {
-    pub fn Get(key: String) -> Result<String> {
-    }
-    pub fn Add(&mut self, key: String, value: String) -> Result<()> {
-        let content = Entry::new(key,value,Command::Add);
-        self.write(content)?;
-        Ok(())
-    }
-    pub fn Delete(key: String) -> Result<()> {
-    }
-
-    fn write(&mut self, entry: Entry) -> Result<()> {
-        
-    }
 }
 
 pub struct Entry {
@@ -56,6 +36,43 @@ impl Entry {
             key_size: key.as_bytes().len(),
             value_size: value.as_bytes().len(),
             cmd,
+        }
+    }
+    pub fn Encode(&self) -> Vec<u8> {
+    }
+}
+
+pub struct DataStore {
+    path: PathBuf,
+    index: HashMap<String, u64>,
+}
+
+pub trait Operate {
+    fn Get(key: String) -> Option<String>;
+    fn Add(&mut self, key: String, value: String) -> Result<()>;
+    fn Delete(key: String) -> Result<()>;
+}
+
+impl Operate for DataStore {
+    fn Get(&mut self, key: String) -> Option<String> {
+    }
+    fn Add(&mut self, key: String, value: String) -> Result<()> {
+        let content = Entry::new(key,value,Command::Add);
+        self.write(content)?;
+        Ok(())
+    }
+    fn Delete(key: String) -> Result<()> {
+    }
+}
+
+impl DataStore {
+    fn Write(&mut self, entry: Entry) -> Result<()> {
+    }
+    fn Read(&mut self, key: &str) -> Result<Entry> {
+        if Some(pos) = self.index.get(key) {
+            //todo:processing position
+        } else {
+            Err(KvError::KeyNotFound)
         }
     }
 }
