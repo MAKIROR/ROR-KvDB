@@ -21,10 +21,10 @@ pub enum Command {
 }
 
 pub struct Entry {
-    key: String,
-    value: String,
     key_size: usize,
     value_size: usize,
+    key: String,
+    value: String,
     cmd: Command,
 }
 
@@ -38,42 +38,32 @@ impl Entry {
             cmd,
         }
     }
-    pub fn Encode(&self) -> Vec<u8> {
-    }
 }
 
 pub struct DataStore {
     path: PathBuf,
-    index: HashMap<String, u64>,
+    index: HashMap<String, Entry>,
 }
 
-pub trait Operate {
-    fn Get(key: String) -> Option<String>;
-    fn Add(&mut self, key: String, value: String) -> Result<()>;
-    fn Delete(key: String) -> Result<()>;
-}
-
-impl Operate for DataStore {
-    fn Get(&mut self, key: String) -> Option<String> {
+impl DataStore {
+    fn Get(&mut self, key: String) -> Result<Option<Entry>> {
+        match self.index.get(&key) { 
+            None => Err(KvError::KeyNotFound),
+            Some(c) => {
+                Ok(Some(Entry)),
+            }
+        }
     }
     fn Add(&mut self, key: String, value: String) -> Result<()> {
-        let content = Entry::new(key,value,Command::Add);
+        let content = Entry::new(
+            key,
+            value,
+            Command::Add,
+        );
         self.write(content)?;
         Ok(())
     }
     fn Delete(key: String) -> Result<()> {
-    }
-}
-
-impl DataStore {
-    fn Write(&mut self, entry: Entry) -> Result<()> {
-    }
-    fn Read(&mut self, key: &str) -> Result<Entry> {
-        if Some(pos) = self.index.get(key) {
-            //todo:processing position
-        } else {
-            Err(KvError::KeyNotFound)
-        }
     }
 }
 
