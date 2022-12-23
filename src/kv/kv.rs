@@ -14,56 +14,33 @@ use std::{
 use serde::{Serialize, Deserialize}; 
 use super::error::KvError;
 
-pub enum Command {
-    Add,
-    Get,
-    Delete,
-}
-
-pub struct Entry {
-    key_size: usize,
-    value_size: usize,
-    key: String,
-    value: String,
-    cmd: Command,
-}
-
-impl Entry {
-    pub fn new(key: String,value: String,cmd: Command) -> Entry {
-        Entry {
-            key,
-            value,
-            key_size: key.as_bytes().len(),
-            value_size: value.as_bytes().len(),
-            cmd,
-        }
-    }
+pub enum Command<T> {
+    Add { key: String, value: T },
+    Get { key: String },
+    Delete {key: String },
 }
 
 pub struct DataStore {
     path: PathBuf,
-    index: HashMap<String, Entry>,
+    index: HashMap<String, Command>,
 }
 
-impl DataStore {
-    fn Get(&mut self, key: String) -> Result<Option<Entry>> {
+impl<T> DataStore<T> {
+    fn Get(&mut self, key: String) -> Result<Option<T>> {
         match self.index.get(&key) { 
             None => Err(KvError::KeyNotFound),
             Some(c) => {
-                Ok(Some(Entry)),
+                Ok(Some(c.value)),
             }
         }
     }
     fn Add(&mut self, key: String, value: String) -> Result<()> {
-        let content = Entry::new(
-            key,
-            value,
-            Command::Add,
-        );
+        let content = Command::Add(key,value);
         self.write(content)?;
         Ok(())
     }
     fn Delete(key: String) -> Result<()> {
+
     }
 }
 
