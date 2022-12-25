@@ -1,26 +1,15 @@
-extern crate quick_error;
+use thiserror::Error;
 
-quick_error! {
-    #[derive(Debug)]
-    pub enum KvError {
-        IoError( err: std::io::Error ) {
-            from()
-            display("IO error: {}", err)
-            source(err)
-        }
-        InvalidPath( path: String ) {
-            display("Invalid Path \"{}\"", path)
-        }
-        KeyNotFound( key: String ) {
-            display("Key not found: \"{}\"", key)
-        }
-        SerdeError( err: serde_json::Error ) {
-            from()
-            display("Serde Json Error: {}", err)
-            source(err)
-        }
-        Other(err: Box<dyn std::error::Error>) {
-            cause(&**err)
-        }
-    }
+#[derive(Error, Debug)]
+pub enum KvError {
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Invalid Path \"{0}\"")]
+    InvalidPath(String),
+    #[error("Serde Json Error: {0}")]
+    SerdeError(#[from] serde_json::Error),
+    #[error("Key not found: \"{0}\"")]
+    KeyNotFound(String),
+    #[error("Unknown error")]
+    Unknown,
 }

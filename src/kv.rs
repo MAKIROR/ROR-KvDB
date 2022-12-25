@@ -36,18 +36,11 @@ pub struct DataStore<T> {
 
 impl<T> DataStore<T> {
     pub fn Refresh(&mut self) -> Result<()> {
-        let mut file = std::fs::File::open(self.path).unwrap();
+        let mut file = std::fs::File::open(&self.path).unwrap();
         let mut content = String::new();
         file.read_to_string(&mut content).unwrap();
-        content = content.unwrap();
-        println!("{}",content);
+        //todo
         Ok(())
-    }
-    fn Get(&mut self, key: String) -> Result<Option<T>> {
-        match self.data.get(&key) { 
-            None => Err(KvError::KeyNotFound(key)),
-            Some(c) => Ok(Some(c.value)),
-        }
     }
     fn Add(&mut self, key: String, value: T) -> Result<()> {
         let content = Entry::new(
@@ -63,16 +56,10 @@ impl<T> DataStore<T> {
     }
 }
 
-pub fn CreateFile( path: String ) -> Result<()>  {
-    let file_path: Vec<&str> = path.split("/").collect();
-    if file_path.len() > 1 {
-        let mut dir = String::new();
-        for i in 0..file_path.len() - 1 {
-            dir.push_str(file_path[i]);
-            dir.push_str("/");
-        }
-        fs::create_dir_all(dir).unwrap();
-    }
-    let mut file = fs::File::create(path)?;
+pub fn Open(path: String) -> Result<DataStore> {
+    let mut file = std::fs::File::open(path).unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    //todo
     Ok(())
 }

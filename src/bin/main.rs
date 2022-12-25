@@ -1,5 +1,5 @@
-use kv::{DataStore, KvError};
+use rorkv::{self,DataStore};
 
 fn main() {
-    DataStore::Refresh("test.json");
+    rorkv::kv::Open("test.json".to_string());
 }
