@@ -1,11 +1,9 @@
-use std::io;
-
-#[macro_use] extern crate quick_error;
+extern crate quick_error;
 
 quick_error! {
     #[derive(Debug)]
     pub enum KvError {
-        IoError( err: io::Error ) {
+        IoError( err: std::io::Error ) {
             from()
             display("IO error: {}", err)
             source(err)
@@ -21,7 +19,7 @@ quick_error! {
             display("Serde Json Error: {}", err)
             source(err)
         }
-        Other(err: Box<std::error::Error>) {
+        Other(err: Box<dyn std::error::Error>) {
             cause(&**err)
         }
     }
