@@ -7,20 +7,28 @@ use std::{
 use serde_json::Result;
 use super::error::KvError;
 
+enum Value {
+    Null,
+    Bool(bool),
+    String(String),
+    Array(Vec<Value>),
+    HashMap(HashMap<String, Value>),
+}
+
 pub enum Command {
     Add,
     Get,
     Delete,
 }
 
-pub struct Entry<T> {
+pub struct Entry {
     cmd: Command,
     key: String,
-    value: T,
+    value: Value,
 }
 
-impl<T> Entry<T> {
-    pub fn new(cmd: Command,key: String, value: T) -> Entry<T> {
+impl Entry {
+    pub fn new(cmd: Command,key: String, value: Value) -> Entry {
         Entry {
             cmd,
             key,
@@ -29,20 +37,39 @@ impl<T> Entry<T> {
     }
 }
 
-pub struct DataStore<T> {
+pub struct DataStore {
     path: String,
-    data: HashMap<String,T>,
+    data: HashMap<String, Value>,
 }
 
-impl<T> DataStore<T> {
-    pub fn Refresh(&mut self) -> Result<()> {
-        let mut file = std::fs::File::open(&self.path).unwrap();
-        let mut content = String::new();
-        file.read_to_string(&mut content).unwrap();
-        //todo
-        Ok(())
+impl DataStore {
+    pub fn open(path: String) -> Result<DataStore> {
+        let data = Self::load(path);
+        match data {
+            Ok(result) => Ok(DataStore{
+                path,
+                data: result
+            }),
+            Err(e) => Err(e),
+        }
     }
-    fn Add(&mut self, key: String, value: T) -> Result<()> {
+    fn load(path: String) -> Result<HashMap<String,Value>> {
+        let mut file = std::fs::File::open(path).unwrap();
+        let mut content = String::new();
+        file.read_to_string(&mut content)?;
+        let data: Vec<String> = serde_json::from_str(&content)?;
+        let result = HashMap::new();
+        for row in &data {
+            let r = serde_json::from_str(row)?;
+            match r.cmd {
+                Command::Add => result.insert(r.key,r.value),
+                Command::Delete => result.remove(&r.key),
+            };
+        }
+        Ok(result)
+    }
+
+    fn add(&mut self, key: String, value: Value) -> Result<()> {
         let content = Entry::new(
             Command::Add,
             key,
@@ -51,15 +78,7 @@ impl<T> DataStore<T> {
         //todo
         Ok(())
     }
-    fn Delete(key: String) -> Result<()> {
+    fn delete(key: String) -> Result<()> {
         Ok(())
     }
-}
-
-pub fn Open(path: String) -> Result<DataStore> {
-    let mut file = std::fs::File::open(path).unwrap();
-    let mut content = String::new();
-    file.read_to_string(&mut content).unwrap();
-    //todo
-    Ok(())
 }

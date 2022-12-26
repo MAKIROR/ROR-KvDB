@@ -1,5 +1,5 @@
 [
-    {"cmd": "Command::Add","key": "name","value": "makiror"},
-    {"cmd": "Command::Add","key": "name","value": "aaron"},
-    {"cmd": "Command::Remove","key": "name","value": "aaron"}
+    {"cmd": "add","key": "name","value": "makiror"},
+    {"cmd": "add","key": "name","value": "aaron"},
+    {"cmd": "delete","key": "name","value": "aaron"}
 ]
