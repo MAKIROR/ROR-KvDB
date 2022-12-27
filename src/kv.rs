@@ -4,9 +4,11 @@ use std::{
     string::String,
     collections::HashMap
 };
-use serde_json::Result;
-use super::error::KvError;
+use serde_json;
+use serde::{Deserialize, Serialize};
+use super::error::{KvError,Result};
 
+#[derive(Serialize, Deserialize,Clone)]
 enum Value {
     Null,
     Bool(bool),
@@ -15,26 +17,18 @@ enum Value {
     HashMap(HashMap<String, Value>),
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum Command {
-    Add,
-    Get,
-    Delete,
+    Get = 0,
+    Add = 1,
+    Delete = 2,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Entry {
     cmd: Command,
     key: String,
     value: Value,
-}
-
-impl Entry {
-    pub fn new(cmd: Command,key: String, value: Value) -> Entry {
-        Entry {
-            cmd,
-            key,
-            value,
-        }
-    }
 }
 
 pub struct DataStore {
@@ -44,41 +38,30 @@ pub struct DataStore {
 
 impl DataStore {
     pub fn open(path: String) -> Result<DataStore> {
-        let data = Self::load(path);
-        match data {
-            Ok(result) => Ok(DataStore{
-                path,
-                data: result
-            }),
-            Err(e) => Err(e),
-        }
+        todo!()
     }
     fn load(path: String) -> Result<HashMap<String,Value>> {
         let mut file = std::fs::File::open(path).unwrap();
         let mut content = String::new();
         file.read_to_string(&mut content)?;
-        let data: Vec<String> = serde_json::from_str(&content)?;
-        let result = HashMap::new();
+        let data: Vec<Entry> = serde_json::from_str(&content)?;
+        let mut result = HashMap::new();
         for row in &data {
-            let r = serde_json::from_str(row)?;
-            match r.cmd {
-                Command::Add => result.insert(r.key,r.value),
-                Command::Delete => result.remove(&r.key),
+            match row.cmd {
+                Command::Add => {
+                    todo!()
+                },
+                Command::Delete => result.remove(&row.key),
+                _ => todo!(),
             };
         }
         Ok(result)
     }
 
     fn add(&mut self, key: String, value: Value) -> Result<()> {
-        let content = Entry::new(
-            Command::Add,
-            key,
-            value,
-        );
-        //todo
-        Ok(())
+        todo!()
     }
     fn delete(key: String) -> Result<()> {
-        Ok(())
+        todo!()
     }
 }
