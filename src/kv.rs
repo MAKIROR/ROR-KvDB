@@ -6,8 +6,9 @@ use std::{
     collections::HashMap
 };
 use serde_json;
-use serde::{Deserialize, Serialize};
 use super::error::{KvError,Result};
+use bincode;
+use bytesize::ByteSize;
 
 pub enum Command {
     Get,
@@ -23,13 +24,6 @@ pub struct Entry {
     value: Vec<u8>,
 }
 
-impl Entry {
-    pub fn encode(&self) -> Vec<u8> {
-    }
-    pub fn decode(&self) -> Result<Entry> {
-    }
-}
-
 pub struct DataStore {
     path: String,
     file_size: u64,
@@ -37,7 +31,11 @@ pub struct DataStore {
 }
 
 impl DataStore {
-    pub fn open(path: String) -> Result<DataStore> {
+    pub fn open(p: String, fs: Option<u64>) -> Result<DataStore> {
+        let file_size = match fs {
+            Some(i) => i,
+            None => ByteSize::mb(1).as_u64(),
+        }
         todo!()
     }
     fn add(&mut self, key: &[u8], value: &[u8]) -> Result<()> {

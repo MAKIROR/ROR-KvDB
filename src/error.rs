@@ -6,10 +6,10 @@ pub enum KvError {
     IoError(#[from] std::io::Error),
     #[error("Invalid Path \"{0}\"")]
     InvalidPath(String),
-    #[error("Serde Json Error: {0}")]
-    SerdeError(#[from] serde_json::Error),
     #[error("Key not found: \"{0}\"")]
     KeyNotFound(String),
+    #[error("Bincode Error: {0}")]
+    BincodeError(#[from] bincode::Error),
     #[error("Unknown error")]
     Unknown,
 }
