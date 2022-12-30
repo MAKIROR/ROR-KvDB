@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum KvError {
     #[error("IO error: {0}")]
-    IoError(#[from] std::io::Error),
+    IOError(#[from] std::io::Error),
     #[error("Invalid Path \"{0}\"")]
     InvalidPath(String),
     #[error("Key not found: \"{0}\"")]
