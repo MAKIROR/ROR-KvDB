@@ -6,6 +6,8 @@ use std::{
         BufReader,
         Write,
         Read,
+        Seek,
+        SeekFrom,
     },
     path::PathBuf,
     string::String,
@@ -13,15 +15,18 @@ use std::{
     fs::File,
 };
 use super::error::{KvError,Result};
-use bincode;
 use bytesize::ByteSize;
+use bincode;
+use serde;
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum Command {
     Get,
     Add,
     Delete,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Entry {
     command: Command,
     key: String,
@@ -36,6 +41,15 @@ impl Entry {
             value: bincode::serialize(&v).unwrap(),
         }
     }
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        let mut buf: Vec<u8> = Vec::new();
+        buf = bincode::serialize(&self)?;
+        Ok(buf)
+    }
+    pub fn decode(buf: &[u8]) -> Result<Entry> {
+        let result: Entry = bincode::deserialize(&buf)?;
+        Ok(result)
+    }
 }
 
 pub struct DataStore {
@@ -43,7 +57,12 @@ pub struct DataStore {
     file_size: u64,
     file_reader: BufReader<File>,
     file_writer: BufWriter<File>,
-    data: HashMap<String, u64>,
+    index: HashMap<String, EntryPos>,
+}
+
+pub struct EntryPos {
+    position: u64,
+    length: u64,
 }
 
 impl DataStore {
@@ -60,10 +79,10 @@ impl DataStore {
             file_size,
             file_reader,
             file_writer,
-            data: HashMap::new(),
+            index: HashMap::new(),
         };
         result.load();
-        Ok(result) 
+        Ok(result)
     }
     fn load(&mut self) -> Result<()> {
         let mut offset = 0;
@@ -76,6 +95,23 @@ impl DataStore {
         todo!()
     }
     fn write(&mut self, entry: Entry) -> Result<()> {
-        todo!()
+        let buf = entry.encode()?; 
+        self.file_writer.write(&buf)?;
+        self.file_writer.flush()?;
+        Ok(())
+    }
+    fn read(&mut self, key: &str) -> Result<Entry> {
+        if let Some(entry_pos) = self.index.get(key) {
+            let position = entry_pos.position;
+            self.file_reader.seek(SeekFrom::Start(position))?;
+            let mut entry_buf = [0; entry_pos.length];
+            if self.file_reader.read(&mut entry_buf)? == 0 {
+                return Err(KvError::EOF);
+            }
+            match Entry::decode(&entry_buf) {
+                Ok(entry) => Ok(entry),
+                Err(e) => Err(e),
+            }
+        }
     }
 }

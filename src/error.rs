@@ -10,6 +10,8 @@ pub enum KvError {
     KeyNotFound(String),
     #[error("Bincode Error: {0}")]
     BincodeError(#[from] bincode::Error),
+    #[error("End Of File")]
+    EOF,
     #[error("Unknown error")]
     Unknown,
 }
