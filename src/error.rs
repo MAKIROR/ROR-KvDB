@@ -1,4 +1,8 @@
 use thiserror::Error;
+use std::{
+    string::FromUtf8Error,
+    array::TryFromSliceError,
+};
 
 #[derive(Error, Debug)]
 pub enum KvError {
@@ -9,7 +13,11 @@ pub enum KvError {
     #[error("Key not found: \"{0}\"")]
     KeyNotFound(String),
     #[error("Bincode Error: {0}")]
-    BincodeError(#[from] bincode::Error),
+    BincodeError(#[from] Box<bincode::ErrorKind>),
+    #[error("FromUtf8 Error: {0}")]
+    DecodeUtf8Error(#[from] FromUtf8Error),
+    #[error("Slice Decode Error: {0}")]
+    SliceDecodeError(#[from] TryFromSliceError),
     #[error("End Of File")]
     EOF,
     #[error("Unknown error")]

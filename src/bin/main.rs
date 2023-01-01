@@ -1,5 +1,5 @@
 use rorkv::{self,DataStore};
 
 fn main() {
-    DataStore::open("test.json".to_string());
+    DataStore::open("test.data".to_string());
 }

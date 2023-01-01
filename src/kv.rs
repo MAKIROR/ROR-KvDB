@@ -19,6 +19,10 @@ use bytesize::ByteSize;
 use bincode;
 use serde;
 
+const USIZE_SIZE: usize = std::mem::size_of::<usize>();
+const META_SIZE: usize = 2 * USIZE_SIZE + 1;
+const COMPACTION_THRESHOLD: u64 = 1024*1024*1024;
+
 #[derive(serde::Serialize, serde::Deserialize)]
 pub enum Command {
     Get,
@@ -28,27 +32,54 @@ pub enum Command {
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Entry {
-    command: Command,
+    meta: Meta,
     key: String,
     value: Vec<u8>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct Meta {
+    command: Command,
+    key_size: usize,
+    value_size: usize,
+}
+
 impl Entry {
-    pub fn new<T: Sized + serde::Serialize>(command: Command, key: String, v: T) -> Entry {
-        Entry {
-            command,
+    pub fn new<T: Sized + serde::Serialize>(command: Command, key: String, v: T) -> Result<Entry> {
+        let value: Vec<u8> = bincode::serialize(&v)?;
+        Ok(Entry {
+            meta: Meta {
+                command,
+                key_size: key.as_bytes().len(),
+                value_size: value.len(),
+            },
             key,
-            value: bincode::serialize(&v).unwrap(),
-        }
+            value: value,
+        })
     }
     pub fn encode(&self) -> Result<Vec<u8>> {
-        let mut buf: Vec<u8> = Vec::new();
-        buf = bincode::serialize(&self)?;
-        Ok(buf)
+        let mut entry_buf = vec![0;self.length()];
+        let value_u8: &[u8] = &self.value;
+        entry_buf[0..USIZE_SIZE].copy_from_slice(&self.meta.key_size.to_be_bytes());
+        entry_buf[USIZE_SIZE..USIZE_SIZE * 2].copy_from_slice(&self.meta.value_size.to_be_bytes());
+        entry_buf[USIZE_SIZE * 2..META_SIZE].copy_from_slice(bincode::serialize(&self.meta.command)?.as_slice());
+        entry_buf[META_SIZE..META_SIZE + self.meta.key_size].copy_from_slice(self.key.as_bytes());
+        entry_buf[META_SIZE + self.meta.key_size..].copy_from_slice(value_u8);
+        Ok(entry_buf)
     }
-    pub fn decode(buf: &[u8]) -> Result<Entry> {
-        let result: Entry = bincode::deserialize(&buf)?;
-        Ok(result)
+    pub fn decode(buf: &[u8; META_SIZE]) -> Result<Meta> {
+        let key_size = usize::from_be_bytes(buf[0..USIZE_SIZE].try_into()?);
+        let value_size = usize::from_be_bytes(buf[USIZE_SIZE..USIZE_SIZE * 2].try_into()?);
+        let command: Command = bincode::deserialize(&buf[USIZE_SIZE * 2..META_SIZE])?;
+
+        Ok(Meta {
+            key_size,
+            value_size,
+            command,
+        })
+    }
+    pub fn length(&self) -> usize {
+        META_SIZE + self.meta.key_size + self.meta.value_size
     }
 }
 
@@ -57,12 +88,8 @@ pub struct DataStore {
     file_size: u64,
     file_reader: BufReader<File>,
     file_writer: BufWriter<File>,
-    index: HashMap<String, EntryPos>,
-}
-
-pub struct EntryPos {
     position: u64,
-    length: u64,
+    index: HashMap<String, u64>,
 }
 
 impl DataStore {
@@ -79,6 +106,7 @@ impl DataStore {
             file_size,
             file_reader,
             file_writer,
+            position: 0,
             index: HashMap::new(),
         };
         result.load();
@@ -86,13 +114,59 @@ impl DataStore {
     }
     fn load(&mut self) -> Result<()> {
         let mut offset = 0;
-        todo!()
+        loop {
+            match self.read_with_offset(offset) {
+                Ok(entry) => {
+                    match entry.meta.command {
+                        Command::Add => {
+                            let size = entry.length() as u64;
+                            offset += size;
+                            self.index.insert(entry.key, offset,);
+                        }
+                        Command::Delete => {
+                            self.index.remove(&entry.key);
+                        }
+                        _ => continue,
+                    }
+                },
+                Err(KvError::EOF) => {
+                    self.position = offset;
+                    return Ok(());
+                },
+                Err(e) => return Err(e),
+            }
+        }
     }
     fn add(&mut self, key: &[u8], value: &[u8]) -> Result<()> {
         todo!()
     }
-    fn delete(key: &[u8]) -> Result<()> {
+    fn delete(key: &String) -> Result<()> {
         todo!()
+    }
+    pub fn compact(&mut self) -> Result<()> {
+        let mut offset = 0;
+        let mut new_hashmap: HashMap<String, u64> = HashMap::new();
+        loop {
+            match self.read_with_offset(offset) {
+                Ok(entry) => {
+                    match entry.meta.command {
+                        Command::Add => {
+                            let size = entry.length() as u64;
+                            offset += size;
+                            new_hashmap.insert(entry.key, offset,);
+                        }
+                        Command::Delete => {
+                            new_hashmap.remove(&entry.key);
+                        }
+                        _ => continue,
+                    }
+                },
+                Err(KvError::EOF) => {break;}
+                Err(e) => return Err(e),
+            }
+        }
+        self.index = new_hashmap;
+        Ok(())
     }
     fn write(&mut self, entry: Entry) -> Result<()> {
         let buf = entry.encode()?; 
@@ -102,16 +176,37 @@ impl DataStore {
     }
     fn read(&mut self, key: &str) -> Result<Entry> {
         if let Some(entry_pos) = self.index.get(key) {
-            let position = entry_pos.position;
-            self.file_reader.seek(SeekFrom::Start(position))?;
-            let mut entry_buf = [0; entry_pos.length];
-            if self.file_reader.read(&mut entry_buf)? == 0 {
-                return Err(KvError::EOF);
-            }
-            match Entry::decode(&entry_buf) {
-                Ok(entry) => Ok(entry),
-                Err(e) => Err(e),
-            }
+            return self.read_with_offset(*entry_pos);
         }
+        Err(KvError::KeyNotFound(key.to_string()))
+    }
+    fn read_with_offset(&mut self, offset: u64) -> Result<Entry> {
+        self.file_reader.seek(SeekFrom::Start(offset))?;
+        let mut entry_buf: [u8; META_SIZE] = [0; META_SIZE];
+        let len = self.file_reader.read(&mut entry_buf)?;
+        if len == 0 {
+            return Err(KvError::EOF);
+        }
+        return match Entry::decode(&entry_buf) {
+            Ok(entry_meta) => {
+                let mut key_buf = vec![0; entry_meta.key_size];
+                self.file_reader.read_exact(key_buf.as_mut_slice())?;
+                let key = String::from_utf8(key_buf)?;
+                
+                let mut value_buf = vec![0; entry_meta.value_size];
+                self.file_reader.read_exact(value_buf.as_mut_slice())?;
+
+                Ok(Entry {
+                    meta: Meta{
+                        command: entry_meta.command,
+                        key_size: entry_meta.key_size,
+                        value_size: entry_meta.key_size,
+                    },
+                    key: key,
+                    value: value_buf,
+                })
+            },
+            Err(e) => Err(e),
+        };
     }
 }
