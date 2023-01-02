@@ -1,6 +1,6 @@
 extern crate serde;
 
-pub use kv::DataStore;
+pub use kv::{DataStore,Entry};
 pub use error::{KvError, Result};
 
 pub mod kv;

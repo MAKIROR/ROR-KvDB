@@ -20,6 +20,7 @@ pub enum KvError {
     SliceDecodeError(#[from] TryFromSliceError),
     #[error("End Of File")]
     EOF,
+    
     #[error("Unknown error")]
     Unknown,
 }
