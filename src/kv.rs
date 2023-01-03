@@ -22,16 +22,17 @@ use serde;
 const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 1;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
 pub enum Command {
     Add = 0,
     Delete = 1,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-pub enum Entry {
-    Add { meta: Meta, key: String, value: Vec<u8> },
-    Delete { meta: Meta, key: String },
+pub struct Entry {
+    meta: Meta, 
+    key: String, 
+    value: Vec<u8>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -44,24 +45,25 @@ pub struct Meta {
 impl Entry {
     pub fn add(key: String, value: Vec<u8>) -> Entry {
         let value_u8_array: &[u8] = &value;
-        Entry::Add {
+        Entry {
             meta: Meta {
                 command: Command::Add,
                 key_size: key.as_bytes().len(),
-                value: value_u8_array.len()
+                value_size: value_u8_array.len()
             },
             key,
             value: value
         }
     }    
     pub fn delete(key: String) -> Entry {
-        Entry::Delete {
+        Entry {
             meta: Meta {
                 command: Command::Add,
                 key_size: key.as_bytes().len(),
-                value: 0,
+                value_size: 0,
             },
-            key
+            key,
+            value: vec![0; 0]
         }
     }
     pub fn size(&self) -> usize {
@@ -70,7 +72,7 @@ impl Entry {
     pub fn encode(&self) -> Result<Vec<u8>> {
         let mut buf = vec![0; self.size()];
         let value_u8_array: &[u8] = &self.value;
-        buf[0..ENTRY_META_SIZE - USIZE_SIZE * 2].copy_from_slice(bincode::serialize(&self.command).unwrap().as_slice());
+        buf[0..ENTRY_META_SIZE - USIZE_SIZE * 2].copy_from_slice(bincode::serialize(&self.meta.command).unwrap().as_slice());
         buf[ENTRY_META_SIZE - USIZE_SIZE * 2..USIZE_SIZE].copy_from_slice(&self.meta.key_size.to_be_bytes());
         buf[USIZE_SIZE..USIZE_SIZE * 2].copy_from_slice(&self.meta.value_size.to_be_bytes());
         buf[ENTRY_META_SIZE..ENTRY_META_SIZE + self.meta.key_size].copy_from_slice(self.key.as_bytes());
@@ -78,7 +80,7 @@ impl Entry {
         Ok(buf)
     }
     pub fn decode(buf: &[u8; ENTRY_META_SIZE]) -> Result<Meta> {
-        let command: Command = usize::from_be_bytes(buf[0..ENTRY_META_SIZE - USIZE_SIZE * 2].try_into()?);
+        let command: Command = bincode::deserialize(&buf[0..ENTRY_META_SIZE - USIZE_SIZE * 2])?;
         let key_size = usize::from_be_bytes(buf[ENTRY_META_SIZE - USIZE_SIZE * 2..USIZE_SIZE].try_into()?);
         let value_size = usize::from_be_bytes(buf[USIZE_SIZE..USIZE_SIZE * 2].try_into()?);
         Ok(
@@ -123,7 +125,7 @@ impl DataStore {
     }
     pub fn add<T: Sized + serde::Serialize>(&mut self, key: String, value: T) -> Result<()> {
         let encode_value: Vec<u8> = bincode::serialize(&value)?;
-        let entry = Entry::add(key, encode_value,)?;
+        let entry = Entry::add(key, encode_value,);
         self.write(&entry)?;
         Ok(())
     }
@@ -151,10 +153,10 @@ impl DataStore {
         loop {
             match self.read_with_offset(offset) {
                 Ok(entry) => {
-                    let size = entry.length() as u64;
-                    match entry() {
-                        Entry::Add {meta, key, value} => {new_hashmap.insert(*entry.key, offset,);}
-                        Entry::Delete {meta, key} => {new_hashmap.remove(&entry.key);}
+                    let size = entry.size() as u64;
+                    match entry.meta.command {
+                        Command::Add => {new_hashmap.insert((*entry.key).to_string(), offset,);}
+                        Command::Delete => {new_hashmap.remove(&entry.key);}
                     }
                     offset += size;
                 },
@@ -171,12 +173,13 @@ impl DataStore {
         loop {
             match self.read_with_offset(offset) {
                 Ok(entry) => {
-                    let size = entry.length() as u64;
-                    if let Some(valid_pos) = self.index.get(&entry.key) {
-                        if entry.meta.command == Command::Add {
-                            new_vec.push(entry);
-                            offset += size;
-                        }
+                    let size = entry.size() as u64;
+                    offset += size;
+                    if entry.meta.command != Command::Add {
+                        continue;
+                    }
+                    if let Some(valid_pos) = self.index.get(&entry.key){
+                        new_vec.push(entry);
                     }
                 },
                 Err(KvError::EOF) => {break;}
@@ -205,33 +208,34 @@ impl DataStore {
             return Err(KvError::EOF);
         }
         return match Entry::decode(&entry_buf) {
-            Ok(entry_head) => {
-                let mut key_buf = vec![0; entry_head.key_size];
+            Ok(entry_meta) => {
+                let mut key_buf = vec![0; entry_meta.key_size];
                 self.file_reader.read_exact(key_buf.as_mut_slice())?;
                 let key = String::from_utf8(key_buf)?;
                 
-                let mut value_buf = vec![0; entry_head.value_size];
+                let mut value_buf = vec![0; entry_meta.value_size];
                 self.file_reader.read_exact(value_buf.as_mut_slice())?;
-                let result: Entry = match entry_head.command {
+                let result: Entry = match entry_meta.command {
                     Command::Add => {
-                        Entry::Add {
+                        Entry {
                             meta: Meta {
                                 command: Command::Add,
-                                key_size: entry_head.key_size,
-                                value_size: entry_head.value_size,
+                                key_size: entry_meta.key_size,
+                                value_size: entry_meta.value_size,
                             },
                             key: key,
                             value: value_buf,
                         }
                     }
                     Command::Delete => {
-                        Entry::Delete {
+                        Entry {
                             meta: Meta {
                                 command: Command::Delete,
-                                key_size: entry_head.key_size,
-                                value_size: entry_head.value_size,
+                                key_size: entry_meta.key_size,
+                                value_size: entry_meta.value_size,
                             },
                             key: key,
+                            value: vec![0; 0],
                         }
                     }
                 };
