@@ -10,9 +10,11 @@ pub enum KvError {
     IOError(#[from] std::io::Error),
     #[error("Invalid Path \"{0}\"")]
     InvalidPath(String),
+    #[error("Path \"{0}\" is a folder")]
+    IsFolder(String),
     #[error("Key not found: \"{0}\"")]
     KeyNotFound(String),
-    #[error("Bincode Error: {0}")]
+    #[error("{0}")]
     BincodeError(#[from] Box<bincode::ErrorKind>),
     #[error("FromUtf8 Error: {0}")]
     DecodeUtf8Error(#[from] FromUtf8Error),
@@ -20,7 +22,6 @@ pub enum KvError {
     SliceDecodeError(#[from] TryFromSliceError),
     #[error("End Of File")]
     EOF,
-    
     #[error("Unknown error")]
     Unknown,
 }

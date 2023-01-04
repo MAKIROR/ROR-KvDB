@@ -1,7 +1,6 @@
 use std::{
-    fs::{self,OpenOptions},
+    fs::self,
     io::{
-        self, 
         BufWriter, 
         BufReader,
         Write,
@@ -9,33 +8,32 @@ use std::{
         Seek,
         SeekFrom,
     },
-    path::PathBuf,
     string::String,
     collections::HashMap,
     fs::File,
 };
 use super::error::{KvError,Result};
-use bytesize::ByteSize;
 use bincode;
 use serde;
 
 const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
+const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
-#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 pub enum Command {
-    Add = 0,
-    Delete = 1,
+    Add,
+    Delete,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Entry {
     meta: Meta, 
     key: String, 
     value: Vec<u8>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Meta {
     command: Command,
     key_size: usize,
@@ -58,7 +56,7 @@ impl Entry {
     pub fn delete(key: String) -> Entry {
         Entry {
             meta: Meta {
-                command: Command::Add,
+                command: Command::Delete,
                 key_size: key.as_bytes().len(),
                 value_size: 0,
             },
@@ -95,7 +93,6 @@ impl Entry {
 
 pub struct DataStore {
     path: String,
-    file_size: u64,
     file_reader: BufReader<File>,
     file_writer: BufWriter<File>,
     index: HashMap<String, u64>,
@@ -105,12 +102,10 @@ pub struct DataStore {
 
 impl DataStore {
     pub fn open(p: String) -> Result<DataStore> {
-        let file_size = ByteSize::mb(1).as_u64();
-        let mut file_reader = BufReader::new(File::open(&p)?);
-        let mut file_writer = BufWriter::new(OpenOptions::new().create(true).write(true).append(true).open(&p)?);
+        let file_writer = BufWriter::new(File::create(&p)?);
+        let file_reader = BufReader::new(File::open(&p)?);
         let mut result = DataStore {
             path: p,
-            file_size,
             file_reader,
             file_writer,
             index: HashMap::new(),
@@ -120,20 +115,31 @@ impl DataStore {
         result.index = result.load_hashmap()?;
         Ok(result)
     }
-    pub fn get(&mut self, key: String) -> Result<Vec<u8>> {
+    pub fn get<T>(&mut self, key: String) -> Result<T> 
+    where
+        T: Sized + serde::Serialize + serde::de::DeserializeOwned,
+    {
         match self.read(&key) {
-            Ok(entry) => return Ok(entry.value),
+            Ok(entry) => {
+                let buf: &[u8] = &entry.value;
+                let value = bincode::deserialize(buf)?;
+                return Ok(value);
+            },
             Err(KvError::KeyNotFound(key)) => Err(KvError::KeyNotFound(key)),
             Err(e) => return Err(e),
         }
     }
-    pub fn add<T: Sized + serde::Serialize>(&mut self, key: String, value: T) -> Result<()> {
+    pub fn add<T>(&mut self, key: String, value: T) -> Result<()> 
+    where
+        T: Sized + serde::Serialize + serde::de::DeserializeOwned,
+    {
         let encode_value: Vec<u8> = bincode::serialize(&value)?;
         let entry = Entry::add((*key).to_string(), encode_value,);
         let size = self.write(&entry)? as u64;
         if let Some(_pos) = self.index.get(&key){
             self.uncompacted += size;
         }
+        self.index.insert((*entry.key).to_string(), self.position);
         Ok(())
     }
     pub fn delete(&mut self, key: String) -> Result<()> {
@@ -148,14 +154,11 @@ impl DataStore {
     }
     pub fn compact(&mut self) -> Result<()> {
         let new_vec = self.load_vec()?;
-        if new_vec.is_empty() {
-            return Ok(());
-        }
         fs::remove_file(&self.path)?;
         self.file_writer = BufWriter::new(File::create(&self.path)?);
         self.file_reader = BufReader::new(File::open(&self.path)?);
         for entry in &new_vec {
-            self.write(&entry);
+            self.write(&entry)?;
         }
         Ok(())
     }
@@ -186,13 +189,12 @@ impl DataStore {
             match self.read_with_offset(offset) {
                 Ok(entry) => {
                     let size = entry.size() as u64;
+                    if let Some(pos) = self.index.get(&entry.key){
+                        if entry.meta.command == Command::Add && *pos == offset {
+                            new_vec.push(entry);
+                        }
+                    }
                     offset += size;
-                    if entry.meta.command != Command::Add {
-                        continue;
-                    }
-                    if let Some(valid_pos) = self.index.get(&entry.key){
-                        new_vec.push(entry);
-                    }
                 },
                 Err(KvError::EOF) => {break;}
                 Err(e) => return Err(e),
@@ -201,6 +203,9 @@ impl DataStore {
         Ok(new_vec)
     }
     fn write(&mut self, entry: &Entry) -> Result<u64> {
+        if self.uncompacted >= COMPACTION_THRESHOLD {
+            self.compact()?;
+        }
         let buf = entry.encode()?; 
         let size = buf.len() as u64;
         self.position += size;
