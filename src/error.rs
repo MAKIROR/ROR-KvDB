@@ -20,6 +20,10 @@ pub enum KvError {
     DecodeUtf8Error(#[from] FromUtf8Error),
     #[error("Slice Decode Error: {0}")]
     SliceDecodeError(#[from] TryFromSliceError),
+    #[error("Unknown type '{0}'")]
+    UnknownType(String),
+    #[error("Cannot convert '{0}' to {1}")]
+    ConvertError(String,String),
     #[error("End Of File")]
     EOF,
     #[error("Unknown error")]

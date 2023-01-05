@@ -19,6 +19,16 @@ use serde;
 const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, PartialEq, Debug)]
+
+pub enum Value {
+    Null,
+    Bool(bool),
+    Int32(i32),
+    Int64(i64),
+    String(String),
+    Array(Vec<Value>),
+}
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 pub enum Command {
@@ -30,7 +40,7 @@ pub enum Command {
 pub struct Entry {
     meta: Meta, 
     key: String, 
-    value: Vec<u8>,
+    value: Value,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -40,28 +50,27 @@ pub struct Meta {
     value_size: usize,
 }
 
-impl Entry {
-    pub fn add(key: String, value: Vec<u8>) -> Entry {
-        let value_u8_array: &[u8] = &value;
+impl Entry { 
+    pub fn add(key: String, value: Value, value_size: usize) -> Entry {
         Entry {
             meta: Meta {
                 command: Command::Add,
                 key_size: key.as_bytes().len(),
-                value_size: value_u8_array.len()
+                value_size: value_size
             },
             key,
             value: value
         }
-    }    
+    }   
     pub fn delete(key: String) -> Entry {
         Entry {
             meta: Meta {
                 command: Command::Delete,
                 key_size: key.as_bytes().len(),
-                value_size: 0,
+                value_size: 4,
             },
             key,
-            value: vec![0; 0]
+            value: Value::Null,
         }
     }
     pub fn size(&self) -> usize {
@@ -69,12 +78,11 @@ impl Entry {
     }
     pub fn encode(&self) -> Result<Vec<u8>> {
         let mut buf = vec![0; self.size()];
-        let value_u8_array: &[u8] = &self.value;
-        buf[0..ENTRY_META_SIZE - USIZE_SIZE * 2].copy_from_slice(bincode::serialize(&self.meta.command).unwrap().as_slice());
+        buf[0..ENTRY_META_SIZE - USIZE_SIZE * 2].copy_from_slice(bincode::serialize(&self.meta.command)?.as_slice());
         buf[ENTRY_META_SIZE - USIZE_SIZE * 2..ENTRY_META_SIZE - USIZE_SIZE].copy_from_slice(&self.meta.key_size.to_be_bytes());
         buf[ENTRY_META_SIZE - USIZE_SIZE..ENTRY_META_SIZE].copy_from_slice(&self.meta.value_size.to_be_bytes());
         buf[ENTRY_META_SIZE..ENTRY_META_SIZE + self.meta.key_size].copy_from_slice(self.key.as_bytes());
-        buf[ENTRY_META_SIZE + self.meta.key_size..].copy_from_slice(value_u8_array);
+        buf[ENTRY_META_SIZE + self.meta.key_size..].copy_from_slice(bincode::serialize(&self.value)?.as_slice());
         Ok(buf)
     }
     pub fn decode(buf: &[u8; ENTRY_META_SIZE]) -> Result<Meta> {
@@ -92,7 +100,7 @@ impl Entry {
 }
 
 pub struct DataStore {
-    path: String,
+    pub path: String,
     file_reader: BufReader<File>,
     file_writer: BufWriter<File>,
     index: HashMap<String, u64>,
@@ -115,26 +123,18 @@ impl DataStore {
         result.index = result.load_hashmap()?;
         Ok(result)
     }
-    pub fn get<T>(&mut self, key: String) -> Result<T> 
-    where
-        T: Sized + serde::Serialize + serde::de::DeserializeOwned,
-    {
+    pub fn get(&mut self, key: String) -> Result<Value> {
         match self.read(&key) {
             Ok(entry) => {
-                let buf: &[u8] = &entry.value;
-                let value = bincode::deserialize(buf)?;
-                return Ok(value);
+                return Ok(entry.value);
             },
             Err(KvError::KeyNotFound(key)) => Err(KvError::KeyNotFound(key)),
             Err(e) => return Err(e),
         }
     }
-    pub fn add<T>(&mut self, key: String, value: T) -> Result<()> 
-    where
-        T: Sized + serde::Serialize + serde::de::DeserializeOwned,
-    {
-        let encode_value: Vec<u8> = bincode::serialize(&value)?;
-        let entry = Entry::add((*key).to_string(), encode_value,);
+    pub fn add(&mut self, key: String, value: Value) -> Result<()> {
+        let value_size: usize = bincode::serialize(&value)?.len();
+        let entry = Entry::add((*key).to_string(), value, value_size);
         let size = self.write(&entry)? as u64;
         if let Some(_pos) = self.index.get(&key){
             self.uncompacted += size;
@@ -234,6 +234,7 @@ impl DataStore {
                 
                 let mut value_buf = vec![0; entry_meta.value_size];
                 self.file_reader.read_exact(value_buf.as_mut_slice())?;
+                let value: Value = bincode::deserialize(&value_buf.as_mut_slice())?;
                 let result: Entry = match entry_meta.command {
                     Command::Add => {
                         Entry {
@@ -243,7 +244,7 @@ impl DataStore {
                                 value_size: entry_meta.value_size,
                             },
                             key: key,
-                            value: value_buf,
+                            value: value,
                         }
                     }
                     Command::Delete => {
@@ -254,7 +255,7 @@ impl DataStore {
                                 value_size: entry_meta.value_size,
                             },
                             key: key,
-                            value: vec![0; 0],
+                            value: Value::Null,
                         }
                     }
                 };
