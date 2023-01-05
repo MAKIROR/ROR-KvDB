@@ -1,9 +1,8 @@
 use std::{
     env,
     io::{self, Write},
-    path::Path,
 };
-use rorkv::{RorDb,DataStore,KvError,Result};
+use rdb::{RorDb,DataStore};
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();

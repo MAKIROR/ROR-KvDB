@@ -80,18 +80,21 @@ impl RorDb {
                 } else {
                     return Err(KvError::ParameterError("add".to_string()));
                 }
+                println!("Successfully added data {0} : {1}",command[1],command[2]);
             }
             "delete" => {
                 if command.len() != 2 {
                     return Err(KvError::ParameterError("delete".to_string()));
                 }
-                self.database.delete(command[1].to_string())?
+                self.database.delete(command[1].to_string())?;
+                println!("Successfully delete data {}",command[1]);
             }, 
             "compact" => {
                 if command.len() != 2 {
                     return Err(KvError::ParameterError("compact".to_string()));
                 }
-                self.database.compact()?
+                self.database.compact()?;
+                println!("Datafile {} has been compacted", self.database.path);
             },
             "get" => {
                 if command.len() != 2 {
@@ -116,8 +119,14 @@ impl RorDb {
                 };
                 println!("{}",str_value);
             }
+            "quit" => quit_program(),
             _ => return Err(KvError::UnknownCommand(command[0].to_string())),
         }
         Ok(())
     }
+}
+
+pub fn quit_program() {
+    println!("Quit ROR Database");
+    std::process::exit(0);
 }
