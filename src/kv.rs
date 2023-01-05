@@ -9,8 +9,9 @@ use std::{
         SeekFrom,
     },
     string::String,
+    path::Path,
     collections::HashMap,
-    fs::File,
+    fs::{File,OpenOptions},
 };
 use super::error::{KvError,Result};
 use bincode;
@@ -19,15 +20,17 @@ use serde;
 const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
-#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, PartialEq, Debug)]
 
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
 pub enum Value {
     Null,
     Bool(bool),
     Int32(i32),
     Int64(i64),
+    Float32(f32),
+    Float64(f64),
     String(String),
-    Array(Vec<Value>),
+    Char(Vec<char>),
 }
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
@@ -109,11 +112,22 @@ pub struct DataStore {
 }
 
 impl DataStore {
-    pub fn open(p: String) -> Result<DataStore> {
-        let file_writer = BufWriter::new(File::create(&p)?);
-        let file_reader = BufReader::new(File::open(&p)?);
+    pub fn open(path: String) -> Result<DataStore> {
+        let file_path_vec: Vec<&str> = path.split("/").collect();
+        let path_slice = Path::new(&path);
+        if file_path_vec.len() > 1 && !path_slice.exists() {
+            let mut dir = String::new();
+            for i in 0..file_path_vec.len() - 1 {
+                dir.push_str(file_path_vec[i]);
+                dir.push_str("/");
+            }
+            std::fs::create_dir_all(dir)?;
+        }
+
+        let file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).append(true).open(&path)?);
+        let file_reader = BufReader::new(File::open(&path)?);
         let mut result = DataStore {
-            path: p,
+            path: path,
             file_reader,
             file_writer,
             index: HashMap::new(),
@@ -139,7 +153,7 @@ impl DataStore {
         if let Some(_pos) = self.index.get(&key){
             self.uncompacted += size;
         }
-        self.index.insert((*entry.key).to_string(), self.position);
+        self.index.insert((*entry.key).to_string(), self.position - size);
         Ok(())
     }
     pub fn delete(&mut self, key: String) -> Result<()> {

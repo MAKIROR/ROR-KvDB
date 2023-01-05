@@ -10,8 +10,6 @@ pub enum KvError {
     IOError(#[from] std::io::Error),
     #[error("Invalid Path \"{0}\"")]
     InvalidPath(String),
-    #[error("Path \"{0}\" is a folder")]
-    IsFolder(String),
     #[error("Key not found: \"{0}\"")]
     KeyNotFound(String),
     #[error("{0}")]
@@ -22,8 +20,12 @@ pub enum KvError {
     SliceDecodeError(#[from] TryFromSliceError),
     #[error("Unknown type '{0}'")]
     UnknownType(String),
+    #[error("Unknown command '{0}'")]
+    UnknownCommand(String),
     #[error("Cannot convert '{0}' to {1}")]
     ConvertError(String,String),
+    #[error("Incorrect argument to command '{0}'")]
+    ParameterError(String),
     #[error("End Of File")]
     EOF,
     #[error("Unknown error")]
