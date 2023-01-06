@@ -81,7 +81,7 @@ This form just a concept, the actual Uncompacted is not expressed in this form. 
 After the above table is compacted, it will become like this:
 | DataFile | Uncompacted  |
 | :----: | :----: |
-| add("name","Aaron") | true |
+| add("name","Aaron") | false |
 
 Look! Invalid data is cleaned up!
 
