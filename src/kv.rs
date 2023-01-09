@@ -15,13 +15,13 @@ use std::{
 };
 use super::error::{KvError,Result};
 use bincode;
-use serde;
+use serde::{Serialize,Deserialize};
 
 const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -33,20 +33,20 @@ pub enum Value {
     Char(Vec<char>),
 }
 
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub enum Command {
     Add,
     Delete,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Entry {
     meta: Meta, 
     key: String, 
     value: Value,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Meta {
     command: Command,
     key_size: usize,

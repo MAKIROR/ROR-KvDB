@@ -26,6 +26,8 @@ pub enum KvError {
     ConvertError(String,String),
     #[error("Incorrect argument to command '{0}'")]
     ParameterError(String),
+    #[error("{0}")]
+    TomlDeError(#[from] toml::de::Error),
     #[error("End Of File")]
     EOF,
     #[error("Unknown error")]

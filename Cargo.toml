@@ -9,6 +9,7 @@ edition = "2021"
 bincode = "1.2.1"
 serde = { version = "1.0.151", features = ["derive"] }
 thiserror = "1.0.24"
+toml = "0.5.10"
 
 [profile.release]
 opt-level = 'z'

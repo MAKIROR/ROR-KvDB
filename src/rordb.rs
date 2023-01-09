@@ -9,9 +9,14 @@ pub struct RorDb {
 }
 
 impl RorDb {
-    pub fn run(mut self) {
+    pub fn open(path: String) -> Result<DataStore> {
+        let db = DataStore::open(path)?;
+        Ok(db)
+    }
+    pub fn run(db: DataStore) {
+        let mut rordb = RorDb {database:db};
         loop {
-            if let Err(e) = self.match_command() {
+            if let Err(e) = rordb.match_command() {
                 println!("{}",e)
             }
         }

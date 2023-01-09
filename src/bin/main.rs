@@ -2,7 +2,7 @@ use std::{
     env,
     io::{self, Write},
 };
-use rdb::{RorDb,DataStore};
+use rdb::RorDb;
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();
@@ -18,6 +18,6 @@ fn main() {
             }
         }
     }
-    let db = DataStore::open(args[1].clone()).unwrap();
-    RorDb::run(RorDb{database: db});
+    let db = RorDb::open(args[1].clone()).unwrap();
+    RorDb::run(db);
 }
