@@ -3,10 +3,7 @@ use std::{
         Read, 
         BufWriter,
     },
-    net::{
-        TcpListener,
-        TcpStream
-    },
+    net::{SocketAddr, TcpListener, TcpStream},
     fs::File,
     thread,
     time,
@@ -14,33 +11,54 @@ use std::{
 use toml;
 use super::error::Result;
 use serde::{Serialize,Deserialize};
+use tokio;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     name: String,
     ip: String,
-    port: i32,
+    port: String,
 }
 
 pub struct Client {
-    ip: String,
+    ip: SocketAddr,
     stream: TcpStream,
 }
 
 pub struct Server {
     config: Config,
-    clients: Vec<Client>,
+    clients: Vec<SocketAddr>,
 }
 
 impl Server {
-    pub fn new() -> Result<Self> {
-        let config: Config = Self::get_config()?;
-        Ok(Self{
+    pub fn new() -> Self {
+        let config = match Self::get_config() {
+            Ok(config) => config,
+            Err(_e) => Config {
+                name: "Default server".to_string(),
+                ip: "127.0.0.1".to_string(),
+                port: "11451".to_string(),
+            },
+        };
+        return Self {
             config,
             clients: Vec::new()
-        })
+        };
     }
-    pub fn start(&mut self) -> Result<()> {
+    pub async fn start(&mut self) -> Result<()> {
+        let address = self.config.ip.clone() + ":" + &self.config.port.clone();
+        let listener = TcpListener::bind(address).unwrap();
+        loop {
+            let (stream, client_address) = listener.accept()?;
+            self.clients.push(client_address.clone());
+            Self::handle_client(Client {
+                ip: client_address,
+                stream: stream, 
+            }).await;
+        }
+        Ok(())
+    }
+    async fn handle_client(client: Client) {
         todo!()
     }
     fn get_config() -> Result<Config> {
