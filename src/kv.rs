@@ -113,9 +113,14 @@ pub struct DataStore {
 
 impl DataStore {
     pub fn open(path: String) -> Result<DataStore> {
-        let file_path_vec: Vec<&str> = path.split("/").collect();
         let path_slice = Path::new(&path);
-        if file_path_vec.len() > 1 && !path_slice.exists() {
+
+        if path_slice.is_dir() {
+            return Err(KvError::IsDir(path));
+        }
+
+        let file_path_vec: Vec<&str> = path.split("/").collect();
+        if file_path_vec.len() > 1 {
             let mut dir = String::new();
             for i in 0..file_path_vec.len() - 1 {
                 dir.push_str(file_path_vec[i]);
@@ -168,7 +173,6 @@ impl DataStore {
     }
     pub fn compact(&mut self) -> Result<()> {
         let new_vec = self.load_vec()?;
-        fs::remove_file(&self.path)?;
         self.file_writer = BufWriter::new(File::create(&self.path)?);
         self.file_reader = BufReader::new(File::open(&self.path)?);
         for entry in &new_vec {

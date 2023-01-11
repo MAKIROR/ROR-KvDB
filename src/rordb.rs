@@ -1,5 +1,6 @@
 use std::{
     io::{self, Write},
+    path::Path,
 };
 use super::error::{KvError,Result};
 use super::kv::{DataStore,Value};
@@ -95,7 +96,7 @@ impl RorDb {
                 println!("Successfully delete data {}",command[1]);
             }, 
             "compact" => {
-                if command.len() != 2 {
+                if command.len() != 1 {
                     return Err(KvError::ParameterError("compact".to_string()));
                 }
                 self.database.compact()?;

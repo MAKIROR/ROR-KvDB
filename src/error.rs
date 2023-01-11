@@ -8,7 +8,9 @@ use std::{
 pub enum KvError {
     #[error("IO error: {0}")]
     IOError(#[from] std::io::Error),
-    #[error("Invalid Path \"{0}\"")]
+    #[error("Path '{0}' is a folder")]
+    IsDir(String),
+    #[error("Invalid Path '{0}'")]
     InvalidPath(String),
     #[error("Key not found: \"{0}\"")]
     KeyNotFound(String),
