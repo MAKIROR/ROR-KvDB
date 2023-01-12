@@ -1,7 +1,4 @@
-use std::{
-    io::{self, Write},
-    path::Path,
-};
+use std::io::{self, Write};
 use super::error::{KvError,Result};
 use super::kv::{DataStore,Value};
 

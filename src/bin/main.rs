@@ -2,7 +2,7 @@ use std::{
     env,
     io::{self, Write},
 };
-use rdb::{RorDb,KvError};
+use rdb::RorDb;
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();

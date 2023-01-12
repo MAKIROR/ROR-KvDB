@@ -1,5 +1,4 @@
 use std::{
-    fs::self,
     io::{
         BufWriter, 
         BufReader,
@@ -21,7 +20,7 @@ const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -33,20 +32,20 @@ pub enum Value {
     Char(Vec<char>),
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq)]
 pub enum Command {
     Add,
     Delete,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Entry {
     meta: Meta, 
     key: String, 
     value: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Meta {
     command: Command,
     key_size: usize,
@@ -175,6 +174,7 @@ impl DataStore {
         let new_vec = self.load_vec()?;
         self.file_writer = BufWriter::new(File::create(&self.path)?);
         self.file_reader = BufReader::new(File::open(&self.path)?);
+        self.position = 0;
         for entry in &new_vec {
             self.write(&entry)?;
         }
