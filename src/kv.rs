@@ -10,7 +10,7 @@ use std::{
     string::String,
     path::Path,
     collections::HashMap,
-    fs::{File,OpenOptions},
+    fs::{self, File,OpenOptions},
 };
 use super::error::{KvError,Result};
 use bincode;
@@ -20,7 +20,7 @@ const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq,Debug)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -32,20 +32,20 @@ pub enum Value {
     Char(Vec<char>),
 }
 
-#[derive(Serialize, Deserialize, PartialEq)]
+#[derive(Serialize, Deserialize, PartialEq,Debug)]
 pub enum Command {
     Add,
     Delete,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize,Debug)]
 pub struct Entry {
     meta: Meta, 
     key: String, 
     value: Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize,Debug)]
 pub struct Meta {
     command: Command,
     key_size: usize,
@@ -113,19 +113,8 @@ pub struct DataStore {
 impl DataStore {
     pub fn open(path: String) -> Result<DataStore> {
         let path_slice = Path::new(&path);
-
         if path_slice.is_dir() {
             return Err(KvError::IsDir(path));
-        }
-
-        let file_path_vec: Vec<&str> = path.split("/").collect();
-        if file_path_vec.len() > 1 {
-            let mut dir = String::new();
-            for i in 0..file_path_vec.len() - 1 {
-                dir.push_str(file_path_vec[i]);
-                dir.push_str("/");
-            }
-            std::fs::create_dir_all(dir)?;
         }
 
         let file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).append(true).open(&path)?);
@@ -154,6 +143,7 @@ impl DataStore {
         let value_size: usize = bincode::serialize(&value)?.len();
         let entry = Entry::add((*key).to_string(), value, value_size);
         let size = self.write(&entry)? as u64;
+        self.file_writer.flush()?;
         if let Some(_pos) = self.index.get(&key){
             self.uncompacted += size;
         }
@@ -165,19 +155,42 @@ impl DataStore {
             self.index.remove(&key);
             let entry = Entry::delete(key);
             let size = self.write(&entry)?;
+            self.file_writer.flush()?;
             self.uncompacted += size;
             return Ok(());
         }
         Err(KvError::KeyNotFound(key))
     }
     pub fn compact(&mut self) -> Result<()> {
-        let new_vec = self.load_vec()?;
-        self.file_writer = BufWriter::new(File::create(&self.path)?);
-        self.file_reader = BufReader::new(File::open(&self.path)?);
-        self.position = 0;
-        for entry in &new_vec {
-            self.write(&entry)?;
+        self.index = self.load_hashmap()?;
+        let new_filename = self.path.clone() + ".compact";
+        let mut new_file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).open(new_filename.clone())?);
+        let mut new_position = 0;
+        let mut offset = 0;
+        loop {
+            match self.read_with_offset(offset) {
+                Ok(entry) => {
+                    let size = entry.size() as u64;
+                    if let Some(pos) = self.index.get(&entry.key){
+                        if entry.meta.command == Command::Add && *pos == offset {
+                            let buf = entry.encode()?; 
+                            new_file_writer.write(&buf)?;
+                            new_position += size;
+                        }
+                    }
+                    offset += size;
+                },
+                Err(KvError::EOF) => break,
+                Err(e) => return Err(e),
+            }
         }
+        new_file_writer.flush()?;
+        fs::rename(&new_filename, &self.path)?;
+        self.file_writer = new_file_writer;
+        self.file_reader = BufReader::new(File::open(&self.path)?);
+        self.position = new_position;
+        self.uncompacted = 0;
+
         Ok(())
     }
     fn load_hashmap(&mut self) -> Result<HashMap<String, u64>> {
@@ -188,7 +201,7 @@ impl DataStore {
                 Ok(entry) => {
                     let size = entry.size() as u64;
                     match entry.meta.command {
-                        Command::Add => {new_hashmap.insert((*entry.key).to_string(), offset,);}
+                        Command::Add => {new_hashmap.insert((*entry.key).to_string(), offset);}
                         Command::Delete => {new_hashmap.remove(&entry.key);}
                     }
                     offset += size;
@@ -199,27 +212,6 @@ impl DataStore {
         }
         Ok(new_hashmap)
     }
-    fn load_vec(&mut self) -> Result<Vec<Entry>> {
-        self.index = self.load_hashmap()?;
-        let mut offset = 0;
-        let mut new_vec: Vec<Entry> = Vec::new();
-        loop {
-            match self.read_with_offset(offset) {
-                Ok(entry) => {
-                    let size = entry.size() as u64;
-                    if let Some(pos) = self.index.get(&entry.key){
-                        if entry.meta.command == Command::Add && *pos == offset {
-                            new_vec.push(entry);
-                        }
-                    }
-                    offset += size;
-                },
-                Err(KvError::EOF) => {break;}
-                Err(e) => return Err(e),
-            }
-        }
-        Ok(new_vec)
-    }
     fn write(&mut self, entry: &Entry) -> Result<u64> {
         if self.uncompacted >= COMPACTION_THRESHOLD {
             self.compact()?;
@@ -228,7 +220,6 @@ impl DataStore {
         let size = buf.len() as u64;
         self.position += size;
         self.file_writer.write(&buf)?;
-        self.file_writer.flush()?;
         Ok(size)
     }
     fn read(&mut self, key: &String) -> Result<Entry> {
