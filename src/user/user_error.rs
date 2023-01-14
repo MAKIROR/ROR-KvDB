@@ -20,6 +20,8 @@ pub enum UserError {
     MachineIdLengthError,
     #[error("{0}")]
     SystemTimeError(#[from] std::time::SystemTimeError),
+    #[error("{0}")]
+    TryFromIntError(#[from] std::num::TryFromIntError),
 }
 
 pub type Result<T> = std::result::Result<T, UserError>;
