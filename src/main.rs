@@ -21,7 +21,7 @@ fn main() {
 }
 
 fn input_path() -> String {
-    print!("Please enter your database file path\n(If the file does not exist, it will be create automatically): ");
+    print!("Please enter your datafile path\n(If the file does not exist, it will be create automatically): ");
     io::stdout().flush().unwrap();
     let mut path = String::new();
     std::io::stdin().read_line(&mut path).unwrap();    

@@ -1,4 +1,5 @@
 use thiserror::Error;
+use super::user::user_error::UserError;
 use std::{
     string::FromUtf8Error,
     array::TryFromSliceError,
@@ -20,6 +21,8 @@ pub enum KvError {
     DecodeUtf8Error(#[from] FromUtf8Error),
     #[error("Slice Decode Error: {0}")]
     SliceDecodeError(#[from] TryFromSliceError),
+    #[error("{0}")]
+    TomlDeError(#[from] toml::de::Error),
     #[error("Unknown type '{0}'")]
     UnknownType(String),
     #[error("Unknown command '{0}'")]
@@ -29,7 +32,7 @@ pub enum KvError {
     #[error("Incorrect argument to command '{0}'")]
     ParameterError(String),
     #[error("{0}")]
-    TomlDeError(#[from] toml::de::Error),
+    UserError(#[from] UserError),
     #[error("End Of File")]
     EOF,
     #[error("Unknown error")]

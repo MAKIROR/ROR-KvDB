@@ -12,9 +12,9 @@ use std::{
     collections::HashMap,
     fs::{self, File,OpenOptions},
 };
-use super::error::{KvError,Result};
 use bincode;
 use serde::{Serialize,Deserialize};
+use super::error::{KvError,Result};
 
 const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
@@ -127,7 +127,7 @@ impl DataStore {
             position: 0,
             uncompacted: 0,
         };
-        result.index = result.load_hashmap()?;
+        (result.index, result.uncompacted) = result.load_hashmap()?;
         Ok(result)
     }
     pub fn get(&mut self, key: String) -> Result<Value> {
@@ -141,28 +141,31 @@ impl DataStore {
     }
     pub fn add(&mut self, key: String, value: Value) -> Result<()> {
         let value_size: usize = bincode::serialize(&value)?.len();
-        let entry = Entry::add((*key).to_string(), value, value_size);
+        let entry = Entry::add(key.clone(), value, value_size);
         let size = self.write(&entry)? as u64;
         self.file_writer.flush()?;
-        if let Some(_pos) = self.index.get(&key){
-            self.uncompacted += size;
+        if let Some(pos) = self.index.get(&key) {
+            let last_invalid_entry = self.read_with_offset(*pos)?;
+            self.uncompacted += last_invalid_entry.size() as u64;
         }
-        self.index.insert((*entry.key).to_string(), self.position - size);
+        self.index.insert(key, self.position - size);
         Ok(())
     }
     pub fn delete(&mut self, key: String) -> Result<()> {
-        if let Some(_pos) = self.index.get(&key){
+        if let Some(pos) = self.index.get(&key) {
+            let invalid_add_entry = self.read_with_offset(*pos)?;
             self.index.remove(&key);
             let entry = Entry::delete(key);
             let size = self.write(&entry)?;
             self.file_writer.flush()?;
             self.uncompacted += size;
+            self.uncompacted += invalid_add_entry.size() as u64;
+
             return Ok(());
         }
         Err(KvError::KeyNotFound(key))
     }
     pub fn compact(&mut self) -> Result<()> {
-        self.index = self.load_hashmap()?;
         let new_filename = self.path.clone() + ".compact";
         let mut new_file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).open(new_filename.clone())?);
         let mut new_position = 0;
@@ -193,16 +196,24 @@ impl DataStore {
 
         Ok(())
     }
-    fn load_hashmap(&mut self) -> Result<HashMap<String, u64>> {
+    fn load_hashmap(&mut self) -> Result<(HashMap<String, u64>, u64)> {
         let mut offset = 0;
         let mut new_hashmap: HashMap<String, u64> = HashMap::new();
+        let mut uncompacted: u64 = 0;
         loop {
             match self.read_with_offset(offset) {
                 Ok(entry) => {
                     let size = entry.size() as u64;
+                    if let Some(pos) = new_hashmap.get(&entry.key) {
+                        let last_invalid_entry = self.read_with_offset(*pos)?;
+                        uncompacted += last_invalid_entry.size() as u64;
+                    }
                     match entry.meta.command {
                         Command::Add => {new_hashmap.insert((*entry.key).to_string(), offset);}
-                        Command::Delete => {new_hashmap.remove(&entry.key);}
+                        Command::Delete => {
+                            uncompacted += size;
+                            new_hashmap.remove(&entry.key);
+                        }
                     }
                     offset += size;
                 },
@@ -210,7 +221,7 @@ impl DataStore {
                 Err(e) => return Err(e),
             }
         }
-        Ok(new_hashmap)
+        Ok((new_hashmap,uncompacted))
     }
     fn write(&mut self, entry: &Entry) -> Result<u64> {
         if self.uncompacted >= COMPACTION_THRESHOLD {

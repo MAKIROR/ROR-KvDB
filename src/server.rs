@@ -3,15 +3,15 @@ use std::{
         Read, 
         BufWriter,
     },
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream, Shutdown},
     fs::File,
     thread,
     time,
 };
 use toml;
-use super::error::Result;
+use super::error::{KvError,Result};
+use super::kv::{DataStore,Value};
 use serde::{Serialize,Deserialize};
-use tokio;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
@@ -21,18 +21,19 @@ pub struct Config {
 }
 
 pub struct Client {
-    ip: SocketAddr,
+    address: SocketAddr,
     stream: TcpStream,
+    database: DataStore,
 }
 
 pub struct Server {
     config: Config,
-    clients: Vec<SocketAddr>,
+    clients: Vec<thread::JoinHandle<()>>,
 }
 
 impl Server {
     pub fn new() -> Self {
-        let config = match Self::get_config() {
+        let config = match get_config() {
             Ok(config) => config,
             Err(_e) => Config {
                 name: "Default server".to_string(),
@@ -45,27 +46,42 @@ impl Server {
             clients: Vec::new()
         };
     }
-    pub async fn start(&mut self) -> Result<()> {
+    pub fn start(&mut self) -> Result<()> {
         let address = self.config.ip.clone() + ":" + &self.config.port.clone();
-        let listener = TcpListener::bind(address).unwrap();
+        let listener = TcpListener::bind(address)?;
         loop {
             let (stream, client_address) = listener.accept()?;
-            self.clients.push(client_address.clone());
-            Self::handle_client(Client {
-                ip: client_address,
-                stream: stream, 
-            }).await;
+            let thread = thread::spawn(move|| {
+                handle_client(client_address, stream);
+            });
+            self.clients.push(thread);
         }
         Ok(())
     }
-    async fn handle_client(client: Client) {
-        todo!()
+}
+
+fn handle_client(address: SocketAddr, mut stream: TcpStream) -> Result<()> {
+    let mut head = [0 as u8; 1024];
+    stream.read(&mut head)?;
+    //todo
+    let mut data = [0 as u8; 50];
+    loop {
+        match stream.read(&mut data) {
+            Ok(size) => {
+                todo!()
+            },
+            Err(_) => {
+                stream.shutdown(Shutdown::Both)?;
+                break;
+            }
+        }
     }
-    fn get_config() -> Result<Config> {
-        let mut file = File::open("config/server.toml")?;
-        let mut c = String::new();
-        file.read_to_string(&mut c)?;
-        let config: Config = toml::from_str(c.as_str())?;
-        Ok(config)
-    }
+    Ok(())
+}
+fn get_config() -> Result<Config> {
+    let mut file = File::open("config/server.toml")?;
+    let mut c = String::new();
+    file.read_to_string(&mut c)?;
+    let config: Config = toml::from_str(c.as_str())?;
+    Ok(config)
 }
