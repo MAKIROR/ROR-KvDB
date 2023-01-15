@@ -23,6 +23,8 @@ pub enum KvError {
     SliceDecodeError(#[from] TryFromSliceError),
     #[error("{0}")]
     TomlDeError(#[from] toml::de::Error),
+    #[error("{0}")]
+    TomlSeError(#[from] toml::ser::Error),
     #[error("Unknown type '{0}'")]
     UnknownType(String),
     #[error("Unknown command '{0}'")]

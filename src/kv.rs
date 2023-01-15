@@ -111,16 +111,16 @@ pub struct DataStore {
 }
 
 impl DataStore {
-    pub fn open(path: String) -> Result<DataStore> {
-        let path_slice = Path::new(&path);
+    pub fn open(path: &str) -> Result<DataStore> {
+        let path_slice = Path::new(path);
         if path_slice.is_dir() {
-            return Err(KvError::IsDir(path));
+            return Err(KvError::IsDir(path.to_string()));
         }
 
         let file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).append(true).open(&path)?);
         let file_reader = BufReader::new(File::open(&path)?);
         let mut result = DataStore {
-            path: path,
+            path: path.to_string(),
             file_reader,
             file_writer,
             index: HashMap::new(),
@@ -130,8 +130,8 @@ impl DataStore {
         (result.index, result.uncompacted) = result.load_hashmap()?;
         Ok(result)
     }
-    pub fn get(&mut self, key: String) -> Result<Value> {
-        match self.read(&key) {
+    pub fn get(&mut self, key: &str) -> Result<Value> {
+        match self.read(&key.to_string()) {
             Ok(entry) => {
                 return Ok(entry.value);
             },
@@ -139,23 +139,24 @@ impl DataStore {
             Err(e) => return Err(e),
         }
     }
-    pub fn add(&mut self, key: String, value: Value) -> Result<()> {
+    pub fn add(&mut self, key: &str, value: Value) -> Result<()> {
         let value_size: usize = bincode::serialize(&value)?.len();
-        let entry = Entry::add(key.clone(), value, value_size);
+        let entry = Entry::add(key.to_string(), value, value_size);
         let size = self.write(&entry)? as u64;
         self.file_writer.flush()?;
-        if let Some(pos) = self.index.get(&key) {
+        if let Some(pos) = self.index.get(&key.to_string()) {
             let last_invalid_entry = self.read_with_offset(*pos)?;
             self.uncompacted += last_invalid_entry.size() as u64;
         }
-        self.index.insert(key, self.position - size);
+        self.index.insert(key.to_string(), self.position - size);
         Ok(())
     }
-    pub fn delete(&mut self, key: String) -> Result<()> {
-        if let Some(pos) = self.index.get(&key) {
+    pub fn delete(&mut self, key: &str) -> Result<()> {
+        let string_key = key.to_string();
+        if let Some(pos) = self.index.get(&string_key) {
             let invalid_add_entry = self.read_with_offset(*pos)?;
-            self.index.remove(&key);
-            let entry = Entry::delete(key);
+            self.index.remove(&string_key);
+            let entry = Entry::delete(string_key);
             let size = self.write(&entry)?;
             self.file_writer.flush()?;
             self.uncompacted += size;
@@ -163,7 +164,7 @@ impl DataStore {
 
             return Ok(());
         }
-        Err(KvError::KeyNotFound(key))
+        Err(KvError::KeyNotFound(string_key))
     }
     pub fn compact(&mut self) -> Result<()> {
         let new_filename = self.path.clone() + ".compact";

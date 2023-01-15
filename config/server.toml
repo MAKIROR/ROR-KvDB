@@ -1,4 +1,5 @@
-[default_server]
 name = "Default server"
 ip = "127.0.0.1"
-port = 11451
+port = 11419
+worker_id = 0
+data_center_id = 0

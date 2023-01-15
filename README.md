@@ -2,6 +2,10 @@
 A simple Key–Value Database.(v0.1.0)    
 This version does not yet provide support for remote.
 
+## Tutorial Blog (Chinese Only) :    
+<a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust.md" target="_blank">Part 1: Basic Storage Functions</a></br>
+Part 2: User System and Network Services (unfinished)
+
 ## Start
 start command:
 ```

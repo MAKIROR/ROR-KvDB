@@ -1,4 +1,5 @@
 use thiserror::Error;
+use std::str::Utf8Error;
 
 #[derive(Error, Debug)]
 pub enum UserError {
@@ -14,14 +15,26 @@ pub enum UserError {
     RegexError(#[from] regex::Error),
     #[error("{0}")]
     TomlDeError(#[from] toml::de::Error),
-    #[error("The timestamp is abnormal, maybe the clock is back")]
-    ClockBack,
-    #[error("The length of machine id should be between 0-31")]
-    MachineIdLengthError,
+    #[error("{0}")]
+    SerdeJsonError(#[from] serde_json::Error),
     #[error("{0}")]
     SystemTimeError(#[from] std::time::SystemTimeError),
     #[error("{0}")]
     TryFromIntError(#[from] std::num::TryFromIntError),
+    #[error("{0}")]
+    Base64Error(#[from] base64::DecodeError),
+    #[error("{0}")]
+    DecodeUtf8Error(#[from] Utf8Error),
+    #[error("The timestamp is abnormal, maybe the clock is back")]
+    ClockBack,
+    #[error("Unqualified length of data machine id")]
+    WorkerIdLengthError,
+    #[error("Unqualified length of data center id")]
+    DataCenterLengthError,
+    #[error("User '{0}' not found")]
+    UserNotFound(String),
+    #[error("username '{0}' exists")]
+    UserNameExists(String),
 }
 
 pub type Result<T> = std::result::Result<T, UserError>;

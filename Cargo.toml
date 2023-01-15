@@ -6,9 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+base64 = "0.21.0"
 bincode = "1.2.1"
+json = "0.12.4"
 regex = "1.7.1"
 serde = { version = "1.0.151", features = ["derive"] }
+serde_json = "1.0.91"
 thiserror = "1.0.24"
 tokio = "1.24.1"
 toml = "0.5.10"

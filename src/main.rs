@@ -10,7 +10,7 @@ fn main() {
         let p = input_path();
         args.push(p);
     }
-    let db = match RorDb::open(args[1].clone()) {
+    let db = match RorDb::open(args[1].clone().as_str()) {
         Ok(db) => db,
         Err(e) => {
             println!("{}", e);

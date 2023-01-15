@@ -7,7 +7,7 @@ pub struct RorDb {
 }
 
 impl RorDb {
-    pub fn open(path: String) -> Result<DataStore> {
+    pub fn open(path: &str) -> Result<DataStore> {
         let db = DataStore::open(path)?;
         Ok(db)
     }
@@ -34,7 +34,7 @@ impl RorDb {
                 if command.len() != 2 {
                     return Err(KvError::ParameterError("open".to_string()));
                 }
-                let db = DataStore::open((*command[1]).to_string())?;
+                let db = DataStore::open(command[1])?;
                 self.database = db;
                 println!("successfully opened '{}' ", command[1]);
             }
@@ -58,7 +58,7 @@ impl RorDb {
                         "i64" | "long" => {
                             match command[2].parse::<i64>() {
                                 Ok(value) => Value::Int64(value),
-                                Err(_e) => return Err(KvError::ConvertError(command[2].to_string(), "Int64".to_string())),
+                                Err(_e) => return Err(KvError::ConvertError(command[2].to_string().to_string(), "Int64".to_string())),
                             }
                         }
                         "f32" | "float" => {
@@ -77,9 +77,9 @@ impl RorDb {
                         "string" => Value::String(command[2].to_string()),
                         _ => return Err(KvError::UnknownType(command[3].to_string())),
                     };
-                    self.database.add(command[1].to_string(),value)?;
+                    self.database.add(command[1],value)?;
                 } else if command.len() == 3 {
-                    self.database.add(command[1].to_string(), Value::String(command[2].to_string()))?;
+                    self.database.add(command[1], Value::String(command[2].to_string()))?;
                 } else {
                     return Err(KvError::ParameterError("add".to_string()));
                 }
@@ -89,7 +89,7 @@ impl RorDb {
                 if command.len() != 2 {
                     return Err(KvError::ParameterError("delete".to_string()));
                 }
-                self.database.delete(command[1].to_string())?;
+                self.database.delete(command[1])?;
                 println!("Successfully delete data {}",command[1]);
             }, 
             "compact" => {
@@ -103,7 +103,7 @@ impl RorDb {
                 if command.len() != 2 {
                     return Err(KvError::ParameterError("get".to_string()));
                 }
-                let value: Value = self.database.get(command[1].to_string())?;
+                let value: Value = self.database.get(command[1])?;
                 let str_value = match value {
                     Value::Null => "Null".to_string(),
                     Value::String(v) => v,

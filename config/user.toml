@@ -1,1 +1,9 @@
+# The path to the user list file, make sure it exists
+# The default is users.json
 users_path = "users.json"
+# Maximum number of registered users
+# The default is 50
+# If the value is 0, the number of users is not limited (not recommended to set)
+# For security reasons, it is recommended to set it according to the demand, not too large
+# The range is 0-2^16
+user_max = 50
