@@ -1,5 +1,8 @@
+The project is not finished yet, but you can use these functions in the tutorial version：
+https://github.com/MAKIROR/Makiror_Articles/tree/main/resource/example/Make_a_simple_KV_database_with_Rust/part1
+
 # ROR-KvDB
-A simple Key–Value Database.(v0.1.0)    
+A simple Key–Value Database.   
 This version does not yet provide support for remote.
 
 ## Tutorial Blog (Chinese Only) :    
