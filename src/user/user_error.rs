@@ -33,8 +33,10 @@ pub enum UserError {
     DataCenterLengthError,
     #[error("User '{0}' not found")]
     UserNotFound(String),
-    #[error("username '{0}' exists")]
+    #[error("Username '{0}' exists")]
     UserNameExists(String),
+    #[error("The number of users exceeds the limit")]
+    UserLimit,
 }
 
 pub type Result<T> = std::result::Result<T, UserError>;

@@ -5,6 +5,7 @@ use std::{
     },
     net::{SocketAddr, TcpListener, TcpStream, Shutdown},
     fs::{File,OpenOptions},
+    sync::Mutex,
     thread,
     time,
 };
@@ -15,7 +16,7 @@ use serde::{Serialize,Deserialize};
 pub struct Client {
     address: SocketAddr,
     stream: TcpStream,
-    database: DataStore,
+    database: Mutex<DataStore>,
 }
 
 pub struct Server {

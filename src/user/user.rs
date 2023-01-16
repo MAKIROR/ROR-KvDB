@@ -7,9 +7,7 @@ use std::{
     fs::{
         self,
         File,
-        OpenOptions,
     },
-    collections::HashMap,
     path::Path,
 };
 use regex::Regex;
@@ -71,6 +69,9 @@ impl User {
         }
         
         let config = Config::get_config()?;
+        if Self::count_users()? > config.user_max {
+            return Err(UserError::UserLimit);
+        }
         let path_slice = Path::new(&config.path);
         if !path_slice.exists() {
             File::create(&config.path)?;
@@ -114,6 +115,13 @@ impl User {
         }
         Err(UserError::UserNotFound(name))
     }
+    fn count_users() -> Result<u16> {
+        let config = Config::get_config()?;
+        let str_data = fs::read_to_string(&config.path)?;
+        let data: Vec<User> = serde_json::from_str(&str_data)?;
+        Ok(data.len().try_into()?)
+    }
+
     fn encode(&mut self) {
         self.password = base64::encode(self.password.clone());
     }

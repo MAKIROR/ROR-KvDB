@@ -14,7 +14,7 @@ use std::{
 };
 use bincode;
 use serde::{Serialize,Deserialize};
-use super::error::{KvError,Result};
+use super::kv_error::{KvError,Result};
 
 const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
@@ -141,14 +141,15 @@ impl DataStore {
     }
     pub fn add(&mut self, key: &str, value: Value) -> Result<()> {
         let value_size: usize = bincode::serialize(&value)?.len();
-        let entry = Entry::add(key.to_string(), value, value_size);
+        let string_key = key.to_string();
+        let entry = Entry::add(string_key.clone(), value, value_size);
         let size = self.write(&entry)? as u64;
         self.file_writer.flush()?;
-        if let Some(pos) = self.index.get(&key.to_string()) {
+        if let Some(pos) = self.index.get(&string_key) {
             let last_invalid_entry = self.read_with_offset(*pos)?;
             self.uncompacted += last_invalid_entry.size() as u64;
         }
-        self.index.insert(key.to_string(), self.position - size);
+        self.index.insert(string_key, self.position - size);
         Ok(())
     }
     pub fn delete(&mut self, key: &str) -> Result<()> {

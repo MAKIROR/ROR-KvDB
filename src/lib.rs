@@ -1,11 +1,8 @@
-pub use kv::{DataStore,Value,Command};
-pub use error::{KvError, Result};
+pub use store::kv::{DataStore,Value,Command};
+pub use store::kv_error::{KvError, Result};
 //pub use service::{Server,Config};
-pub use rordb::RorDb;
 pub use user::user::User;
 
-mod kv;
-mod error;
+mod store;
 //mod service;
-mod rordb;
 mod user;
