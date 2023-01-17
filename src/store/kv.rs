@@ -117,7 +117,7 @@ impl DataStore {
             return Err(KvError::IsDir(path.to_string()));
         }
 
-        let file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).append(true).open(&path)?);
+        let file_writer = BufWriter::new(OpenOptions::new().write(true).append(true).open(&path)?);
         let file_reader = BufReader::new(File::open(&path)?);
         let mut result = DataStore {
             path: path.to_string(),

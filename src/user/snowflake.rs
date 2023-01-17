@@ -18,6 +18,7 @@ pub struct Snowflake {
     worker_id: i64,
     sequence: i64,
 }
+
 impl Snowflake {
     pub fn new(worker_id: i64, data_center_id: i64) -> Result<Self> {
         if worker_id < 0 || worker_id > WORKER_ID_MAX {

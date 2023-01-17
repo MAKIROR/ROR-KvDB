@@ -9,64 +9,87 @@ use std::{
     thread,
     time,
 };
-use super::error::{KvError,Result};
-use super::kv::{DataStore,Value};
+use super::{
+    error::{RorError,Result},
+    store::kv::{DataStore,Value},
+    user::user::User,
+    request::{ConnectRequest,OperateRequest},
+};
 use serde::{Serialize,Deserialize};
+use same_file::is_same_file;
+use bincode;
 
 pub struct Client {
     address: SocketAddr,
     stream: TcpStream,
-    database: Mutex<DataStore>,
+    db_path: String,
+    user: User,
 }
 
 pub struct Server {
     config: Config,
-    clients: Vec<thread::JoinHandle<()>>,
+    clients: Vec<Client>,
+    dbs: Vec<Mutex<DataStore>>
 }
 
 impl Server {
     pub fn new() -> Self {
-        let config = match Config::get_server() {
+        let config: Config = match Config::get_server() {
             Ok(config) => config,
-            Err(_e) => Config::default,
+            Err(_e) => Config::default(),
         };
         return Self {
             config,
-            clients: Vec::new()
+            clients: Vec::new(),
+            dbs: Vec::new(),
         };
     }
     pub fn start(&mut self) -> Result<()> {
         let address = self.config.ip.clone() + ":" + &self.config.port.clone();
         let listener = TcpListener::bind(address)?;
         loop {
-            let (stream, client_address) = listener.accept()?;
+            let (mut stream, client_address) = listener.accept()?;
             let thread = thread::spawn(move|| {
-                handle_client(client_address, stream);
+                Self::handle_client(stream, client_address);
             });
-            self.clients.push(thread);
+            //todo
         }
+        Ok(())
+    }
+    fn handle_client(mut stream: TcpStream, address: SocketAddr) -> Result<()> {
+        let mut head_buffer: Vec<u8> = Vec::new();
+        stream.read(&mut head_buffer)?;
+        let head: ConnectRequest = bincode::deserialize(&head_buffer)?;
+        /*
+        let mut data = [0 as u8; 50];
+        loop {
+            match stream.read(&mut data) {
+                Ok(size) => {
+                    todo!()
+                },
+                Err(_) => {
+                    stream.shutdown(Shutdown::Both)?;
+                    break;
+                }
+            }
+        }
+        */
+        stream.shutdown(Shutdown::Both)?;
         Ok(())
     }
 }
 
-fn handle_client(address: SocketAddr, mut stream: TcpStream) -> Result<()> {
-    let mut head = [0 as u8; 1024];
-    stream.read(&mut head)?;
-    //todo
-    let mut data = [0 as u8; 50];
-    loop {
-        match stream.read(&mut data) {
-            Ok(size) => {
-                todo!()
-            },
-            Err(_) => {
-                stream.shutdown(Shutdown::Both)?;
-                break;
-            }
+impl Client {
+    pub fn new(address: SocketAddr, stream: TcpStream, db_path: String, user: User) -> Self {
+        Client {
+            address,
+            stream,
+            db_path,
+            user,
         }
     }
-    Ok(())
 }
+
 
 #[derive(Deserialize,Serialize)]
 pub struct Config {

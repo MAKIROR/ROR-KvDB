@@ -55,7 +55,8 @@ impl User {
             _ => return Err(UserError::UnknownLevel(level.to_string())),
         } 
     }
-    pub fn register(mut user: User) -> Result<()> {
+    pub fn register(&self) -> Result<()> {
+        let mut user = self.clone();
         let name_len = user.name.chars().count();
         let password_regex = Regex::new(r"^[a-zA-Z0-9_-]{4,16}$")?;
         if name_len < 2 || name_len > 20 {
