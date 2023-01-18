@@ -4,20 +4,35 @@ use std::{
         Write,
     },
     net::{SocketAddr, TcpListener, TcpStream, Shutdown},
-    fs::{File,OpenOptions},
+    fs::File,
+    collections::HashMap,
     sync::Mutex,
     thread,
-    time,
 };
 use super::{
     error::{RorError,Result},
     store::kv::{DataStore,Value},
-    user::user::User,
-    request::{ConnectRequest,OperateRequest},
+    user::{
+        user::User,
+    },
 };
 use serde::{Serialize,Deserialize};
 use same_file::is_same_file;
 use bincode;
+
+#[derive(Serialize, Deserialize)]
+pub struct ConnectRequest {
+    db_path: String,
+    user_name: String,
+    user_password: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum OperateRequest {
+    Get { key: String },
+    Add { key: String, value: Value },
+    Delete { key: String },
+}
 
 pub struct Client {
     address: SocketAddr,
@@ -29,7 +44,7 @@ pub struct Client {
 pub struct Server {
     config: Config,
     clients: Vec<Client>,
-    dbs: Vec<Mutex<DataStore>>
+    dbs: HashMap<String,Mutex<DataStore>>
 }
 
 impl Server {
@@ -41,25 +56,51 @@ impl Server {
         return Self {
             config,
             clients: Vec::new(),
-            dbs: Vec::new(),
+            dbs: HashMap::new(),
         };
     }
     pub fn start(&mut self) -> Result<()> {
         let address = self.config.ip.clone() + ":" + &self.config.port.clone();
         let listener = TcpListener::bind(address)?;
         loop {
-            let (mut stream, client_address) = listener.accept()?;
-            let thread = thread::spawn(move|| {
-                Self::handle_client(stream, client_address);
+            let (mut stream, address) = listener.accept()?;
+
+            let mut head_buffer: Vec<u8> = Vec::new();
+            stream.read(&mut head_buffer)?;
+            let head: ConnectRequest = bincode::deserialize(&head_buffer)?;
+            let user = match User::login(head.user_name,head.user_password) {
+                Ok(u) => u,
+                Err(e) => return Err(RorError::UserError(e)),
+            };
+            let mut db_path = self.config.data_path.clone() + &head.db_path;
+            let mut should_open = true;
+            for (key, _) in &self.dbs {
+                let exists = is_same_file(&key, &db_path)?;
+                if exists {
+                    db_path = key.clone();
+                    should_open = false;
+                    break;
+                }
+            }
+            if should_open {
+                self.open_new_db(db_path.clone())?;
+            }
+            let client = Client {
+                stream,
+                address,
+                db_path,
+                user,
+            };
+            
+            thread::spawn(move|| {
+                Self::handle_client(client);
             });
             //todo
         }
         Ok(())
     }
-    fn handle_client(mut stream: TcpStream, address: SocketAddr) -> Result<()> {
-        let mut head_buffer: Vec<u8> = Vec::new();
-        stream.read(&mut head_buffer)?;
-        let head: ConnectRequest = bincode::deserialize(&head_buffer)?;
+    fn handle_client(mut client: Client) -> Result<()> {
+
         /*
         let mut data = [0 as u8; 50];
         loop {
@@ -74,22 +115,22 @@ impl Server {
             }
         }
         */
-        stream.shutdown(Shutdown::Both)?;
+        client.stream.shutdown(Shutdown::Both)?;
         Ok(())
     }
-}
-
-impl Client {
-    pub fn new(address: SocketAddr, stream: TcpStream, db_path: String, user: User) -> Self {
-        Client {
-            address,
-            stream,
-            db_path,
-            user,
+    fn open_new_db(&mut self, path: String) -> Result<()> {
+        let db = DataStore::open(path.as_str())?;
+        self.dbs.insert( db.path.clone(), Mutex::new(db) );
+        Ok(())
+    }
+    fn match_command(&mut self, client: &Client, command: Vec<&str>) -> Result<()> {
+        if let Some(mut db) = self.dbs.get(&client.db_path) {
+            todo!()
+        } else {
+            return Err(RorError::DataFileNotFound(client.db_path.clone()));
         }
     }
 }
-
 
 #[derive(Deserialize,Serialize)]
 pub struct Config {
@@ -98,6 +139,7 @@ pub struct Config {
     port: String,
     worker_id: i64,
     data_center_id: i64,
+    data_path: String,
 }
 
 impl Config {
@@ -108,6 +150,7 @@ impl Config {
             port: "11451".to_string(),
             worker_id: 0,
             data_center_id: 0,
+            data_path: "./data/".to_string(),
         }
     }
     pub fn get_server() -> Result<Self> {

@@ -8,4 +8,3 @@ mod store;
 mod user;
 mod server;
 mod error;
-mod request;

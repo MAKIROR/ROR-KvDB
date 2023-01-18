@@ -14,12 +14,12 @@ use regex::Regex;
 use super::user_error::{UserError,Result};
 use super::snowflake::Snowflake;
 use serde::{Serialize,Deserialize};
-use base64;
+use base64::{Engine as _, engine::general_purpose};
 use toml;
 
 #[derive(Debug)]
 pub enum Verify {
-    Correct,
+    Correct(String),
     WrongPassWord,
     UserNotFound,
 }
@@ -90,16 +90,16 @@ impl User {
         write!(file, "{}", json)?;
         Ok(())
     }
-    pub fn login( name: &str, password: &str ) -> Result<Verify> {
-        let user = match Self::search(name.to_string()) {
+    pub fn login( name: String, password: String ) -> Result<Self> {
+        let user = match Self::search(name) {
             Ok(user) => user,
-            Err(UserError::UserNotFound(_)) => return Ok(Verify::UserNotFound),
+            Err(UserError::UserNotFound(name)) => return Err(UserError::UserNotFound(name)),
             Err(e) => return Err(e),
         };
         if password == user.password {
-            return Ok(Verify::Correct);
+            return Ok(user);
         } else {
-            return Ok(Verify::WrongPassWord);
+            return Err(UserError::WrongPassWord);
         }
     }
     
@@ -124,10 +124,10 @@ impl User {
     }
 
     fn encode(&mut self) {
-        self.password = base64::encode(self.password.clone());
+        self.password = general_purpose::STANDARD_NO_PAD.encode(self.password.clone());
     }
     fn decode(&mut self) -> Result<()> {
-        let bytes = base64::decode(self.password.clone())?;
+        let bytes = general_purpose::STANDARD_NO_PAD.decode(self.password.clone())?;
         self.password = std::str::from_utf8(&bytes)?.to_string();
         Ok(())
     }

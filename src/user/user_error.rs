@@ -25,7 +25,7 @@ pub enum UserError {
     Base64Error(#[from] base64::DecodeError),
     #[error("{0}")]
     DecodeUtf8Error(#[from] Utf8Error),
-    #[error("The timestamp is abnormal, maybe the clock is back")]
+    #[error("The timestamp is abnsormal, maybe the clock is back")]
     ClockBack,
     #[error("Unqualified length of data machine id")]
     WorkerIdLengthError,
@@ -33,6 +33,8 @@ pub enum UserError {
     DataCenterLengthError,
     #[error("User '{0}' not found")]
     UserNotFound(String),
+    #[error("Wrong user password")]
+    WrongPassWord,
     #[error("Username '{0}' exists")]
     UserNameExists(String),
     #[error("The number of users exceeds the limit")]
