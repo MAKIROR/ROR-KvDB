@@ -18,7 +18,7 @@ pub enum KvError {
     BincodeError(#[from] Box<bincode::ErrorKind>),
     #[error("FromUtf8 Error: {0}")]
     DecodeUtf8Error(#[from] FromUtf8Error),
-    #[error("Slice Decode Error: {0}")]
+    #[error("{0}")]
     SliceDecodeError(#[from] TryFromSliceError),
     #[error("{0}")]
     TomlDeError(#[from] toml::de::Error),

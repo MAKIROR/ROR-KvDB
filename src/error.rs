@@ -1,11 +1,15 @@
 use thiserror::Error;
+use std::sync::{MutexGuard,PoisonError};
 use super::{
-    store::kv_error::KvError,
+    store::{
+        kv_error::KvError,
+        kv::DataStore,
+    },
     user::user_error::UserError,
 };
 
 #[derive(Error, Debug)]
-pub enum RorError {
+pub enum RorError<T> {
     #[error("IO error: {0}")]
     IOError(#[from] std::io::Error),
     #[error("{0}")]
@@ -28,8 +32,10 @@ pub enum RorError {
     UnknownType(String),
     #[error("Unknown command '{0}'")]
     UnknownCommand(String),
+    #[error("{0}")]
+    PoisonError(#[from] PoisonError<T>),
     #[error("Unknown error")]
     Unknown,
 }
 
-pub type Result<T> = std::result::Result<T, RorError>;
+pub type Result<T> = std::result::Result<T, RorError<T>>;

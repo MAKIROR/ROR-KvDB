@@ -3,10 +3,10 @@ use std::{
         Read,
         Write,
     },
-    net::{SocketAddr, TcpListener, TcpStream, Shutdown},
+    net::{TcpListener, TcpStream, Shutdown},
     fs::File,
     collections::HashMap,
-    sync::Mutex,
+    sync::{Arc,Mutex},
     thread,
 };
 use super::{
@@ -15,36 +15,21 @@ use super::{
     user::{
         user::User,
     },
+    request::*,
 };
 use serde::{Serialize,Deserialize};
 use same_file::is_same_file;
 use bincode;
 
-#[derive(Serialize, Deserialize)]
-pub struct ConnectRequest {
-    db_path: String,
-    user_name: String,
-    user_password: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub enum OperateRequest {
-    Get { key: String },
-    Add { key: String, value: Value },
-    Delete { key: String },
-}
-
 pub struct Client {
-    address: SocketAddr,
     stream: TcpStream,
-    db_path: String,
+    db: Arc<Mutex<DataStore>>,
     user: User,
 }
 
 pub struct Server {
     config: Config,
-    clients: Vec<Client>,
-    dbs: HashMap<String,Mutex<DataStore>>
+    dbs: HashMap<String,Arc<Mutex<DataStore>>>,
 }
 
 impl Server {
@@ -55,80 +40,144 @@ impl Server {
         };
         return Self {
             config,
-            clients: Vec::new(),
             dbs: HashMap::new(),
         };
     }
     pub fn start(&mut self) -> Result<()> {
         let address = self.config.ip.clone() + ":" + &self.config.port.clone();
         let listener = TcpListener::bind(address)?;
-        loop {
-            let (mut stream, address) = listener.accept()?;
+        'outer: loop {
+            let (mut stream, _) = listener.accept()?;
 
             let mut head_buffer: Vec<u8> = Vec::new();
-            stream.read(&mut head_buffer)?;
-            let head: ConnectRequest = bincode::deserialize(&head_buffer)?;
+            stream.read(&mut head_buffer);
+            let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
+                Ok(buf) => buf,
+                Err(_) => {
+                    let err_bytes = bincode::serialize(&ConnectReply::Error(ConnectError::RequestError))?;
+                    stream.write(err_bytes.as_slice());
+                    stream.shutdown(Shutdown::Both);
+                    continue;
+                },
+            };
             let user = match User::login(head.user_name,head.user_password) {
                 Ok(u) => u,
                 Err(e) => return Err(RorError::UserError(e)),
             };
             let mut db_path = self.config.data_path.clone() + &head.db_path;
             let mut should_open = true;
-            for (key, _) in &self.dbs {
-                let exists = is_same_file(&key, &db_path)?;
+            let opened_db: Arc<Mutex<DataStore>>;
+            for (key, db) in &self.dbs {
+                let exists = match is_same_file(&key, &db_path) {
+                    Ok(b) => b,
+                    Err(_) => {
+                        let err_bytes = bincode::serialize(&ConnectReply::Error(ConnectError::FileError))?;
+                        stream.write(err_bytes.as_slice());
+                        stream.shutdown(Shutdown::Both);
+                        continue 'outer;
+                    },
+                };
                 if exists {
                     db_path = key.clone();
+                    opened_db = Arc::clone(db);
                     should_open = false;
                     break;
                 }
             }
             if should_open {
-                self.open_new_db(db_path.clone())?;
+                let opened_db = match self.open_new_db(db_path.clone()) {
+                    Ok(db) => db,
+                    Err(_) => {
+                        let err_bytes = bincode::serialize(&ConnectReply::Error(ConnectError::OpenFileError))?;
+                        stream.write(err_bytes.as_slice());
+                        stream.shutdown(Shutdown::Both);
+                        continue;
+                    },
+                };
             }
             let client = Client {
                 stream,
-                address,
-                db_path,
+                db: opened_db,
                 user,
             };
-            
-            thread::spawn(move|| {
+            thread::spawn(|| {
                 Self::handle_client(client);
             });
-            //todo
         }
         Ok(())
     }
-    fn handle_client(mut client: Client) -> Result<()> {
-
-        /*
-        let mut data = [0 as u8; 50];
+    fn handle_client(mut client: Client) {
         loop {
-            match stream.read(&mut data) {
-                Ok(size) => {
-                    todo!()
+            let mut cmd_buffer: Vec<u8> = Vec::new();
+            let read_result = client.stream.read(&mut cmd_buffer);
+            match read_result {
+                Ok(buf_len) => {
+                    drop(read_result);
+                    if buf_len == 0 {
+                        continue;
+                    }
+                    let command: OperateRequest = match bincode::deserialize(&cmd_buffer) {
+                        Ok(cmd) => cmd,
+                        Err(e) => {
+                            let err = bincode::serialize(&OperateResult::Failure).unwrap();
+                            client.stream.write(err.as_slice()).unwrap();
+                            continue;
+                        }
+                    };
+                    todo!();
                 },
                 Err(_) => {
-                    stream.shutdown(Shutdown::Both)?;
+                    drop(read_result);
+                    client.stream.shutdown(Shutdown::Both).unwrap();
                     break;
                 }
             }
         }
-        */
-        client.stream.shutdown(Shutdown::Both)?;
-        Ok(())
     }
-    fn open_new_db(&mut self, path: String) -> Result<()> {
-        let db = DataStore::open(path.as_str())?;
-        self.dbs.insert( db.path.clone(), Mutex::new(db) );
-        Ok(())
+    fn open_new_db(&mut self, path: String) -> Result<Arc<Mutex<DataStore>>> {
+        let db = Arc::new(
+            Mutex::new(
+                DataStore::open(path.as_str())?
+            )
+        );
+        let arc_clone_db = Arc::clone(&db);
+        self.dbs.insert( path.clone(), db );
+        Ok(arc_clone_db)
     }
-    fn match_command(&mut self, client: &Client, command: Vec<&str>) -> Result<()> {
-        if let Some(mut db) = self.dbs.get(&client.db_path) {
-            todo!()
-        } else {
-            return Err(RorError::DataFileNotFound(client.db_path.clone()));
+    fn match_command(&mut self, client: &mut Client, command: OperateRequest) -> Result<()> {
+        match command {
+            OperateRequest::Get { key } => {
+                match client.db.lock().unwrap().get(&key) {
+                    Ok(v) => {
+                        let value = bincode::serialize(&OperateResult::Success(v))?;
+                        client.stream.write(value.as_slice())?;
+                        return Ok(());
+                    }
+                    Err(e) => return Err(RorError::KvError(e)),
+                }
+            }
+            OperateRequest::Delete { key } => {
+                match client.db.lock().unwrap().delete(&key) {
+                    Ok(v) => {
+                        let value = bincode::serialize(&OperateResult::Success(Value::Null))?;
+                        client.stream.write(value.as_slice())?;
+                        return Ok(());
+                    }
+                    Err(e) => return Err(RorError::KvError(e)),
+                }
+            }
+            OperateRequest::Add { key, value } => {
+                match client.db.lock().unwrap().add(&key,value) {
+                    Ok(v) => {
+                        let value = bincode::serialize(&OperateResult::Success(Value::Null))?;
+                        client.stream.write(value.as_slice())?;
+                        return Ok(());
+                    }
+                    Err(e) => return Err(RorError::KvError(e)),
+                }
+            }
         }
+
     }
 }
 
