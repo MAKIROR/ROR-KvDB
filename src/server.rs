@@ -54,16 +54,14 @@ impl Server {
             let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
                 Ok(buf) => buf,
                 Err(_) => {
-                    let err_bytes = bincode::serialize(&ConnectReply::Error(ConnectError::RequestError))?;
-                    stream.write(err_bytes.as_slice());
-                    stream.shutdown(Shutdown::Both);
+                    Self::send_connect_error(stream, ConnectError::RequestError)?;
                     continue;
                 },
             };
             let user = match User::login(head.user_name,head.user_password) {
                 Ok(u) => u,
                 Err(e) => return Err(RorError::UserError(e)),
-            };
+            }; //todo
             let mut db_path = self.config.data_path.clone() + &head.db_path;
             let mut should_open = true;
             let opened_db: Arc<Mutex<DataStore>>;
@@ -71,9 +69,7 @@ impl Server {
                 let exists = match is_same_file(&key, &db_path) {
                     Ok(b) => b,
                     Err(_) => {
-                        let err_bytes = bincode::serialize(&ConnectReply::Error(ConnectError::FileError))?;
-                        stream.write(err_bytes.as_slice());
-                        stream.shutdown(Shutdown::Both);
+                        Self::send_connect_error(stream, ConnectError::FileError)?;
                         continue 'outer;
                     },
                 };
@@ -88,9 +84,7 @@ impl Server {
                 let opened_db = match self.open_new_db(db_path.clone()) {
                     Ok(db) => db,
                     Err(_) => {
-                        let err_bytes = bincode::serialize(&ConnectReply::Error(ConnectError::OpenFileError))?;
-                        stream.write(err_bytes.as_slice());
-                        stream.shutdown(Shutdown::Both);
+                        Self::send_connect_error(stream, ConnectError::OpenFileError)?;
                         continue;
                     },
                 };
@@ -104,6 +98,12 @@ impl Server {
                 Self::handle_client(client);
             });
         }
+        Ok(())
+    }
+    fn send_connect_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
+        let err_bytes = bincode::serialize(&ConnectReply::Error(err))?;
+        stream.write(err_bytes.as_slice());
+        stream.shutdown(Shutdown::Both);
         Ok(())
     }
     fn handle_client(mut client: Client) {

@@ -17,7 +17,8 @@ pub enum ConnectReply {
 #[derive(Serialize, Deserialize)]
 pub enum ConnectError {
     RequestError,
-    UserError,
+    UsernameError,
+    PasswordError,
     FileError,
     OpenFileError,
 }
