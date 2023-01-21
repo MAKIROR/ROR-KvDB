@@ -29,7 +29,7 @@ pub struct User {
     uid: String,
     name: String,
     password: String,
-    level: String,
+    pub level: String,
 }
 
 impl User {

@@ -21,6 +21,8 @@ pub enum ConnectError {
     PasswordError,
     FileError,
     OpenFileError,
+    PathError,
+    ServerError,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -33,5 +35,6 @@ pub enum OperateRequest {
 #[derive(Serialize, Deserialize)]
 pub enum OperateResult {
     Success(Value),
+    PermissionDenied,
     Failure,
 }

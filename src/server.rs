@@ -8,12 +8,14 @@ use std::{
     collections::HashMap,
     sync::{Arc,Mutex},
     thread,
+    path::PathBuf,
 };
 use super::{
     error::{RorError,Result},
     store::kv::{DataStore,Value},
     user::{
         user::User,
+        user_error::UserError,
     },
     request::*,
 };
@@ -46,6 +48,7 @@ impl Server {
     pub fn start(&mut self) -> Result<()> {
         let address = self.config.ip.clone() + ":" + &self.config.port.clone();
         let listener = TcpListener::bind(address)?;
+
         'outer: loop {
             let (mut stream, _) = listener.accept()?;
 
@@ -60,11 +63,32 @@ impl Server {
             };
             let user = match User::login(head.user_name,head.user_password) {
                 Ok(u) => u,
-                Err(e) => return Err(RorError::UserError(e)),
-            }; //todo
-            let mut db_path = self.config.data_path.clone() + &head.db_path;
-            let mut should_open = true;
-            let opened_db: Arc<Mutex<DataStore>>;
+                Err(UserError::UserNotFound(_)) => {
+                    Self::send_connect_error(stream, ConnectError::UsernameError)?;
+                    continue;
+                },
+                Err(UserError::WrongPassWord) => {
+                    Self::send_connect_error(stream, ConnectError::PasswordError)?;
+                    continue;
+                },
+                Err(e) => {
+                    Self::send_connect_error(stream, ConnectError::ServerError)?;
+                    return Err(RorError::UserError(e))
+                }
+            };
+
+            let mut db_path_buf = PathBuf::new();
+            db_path_buf.push(&self.config.data_path);
+            db_path_buf.push(&head.db_path);
+            let mut db_path = match db_path_buf.into_os_string().into_string() {
+                Ok(s) => s,
+                Err(_) => {
+                    Self::send_connect_error(stream, ConnectError::PathError)?;
+                    continue;
+                },
+            };
+
+            let mut opened_db;
             for (key, db) in &self.dbs {
                 let exists = match is_same_file(&key, &db_path) {
                     Ok(b) => b,
@@ -76,19 +100,25 @@ impl Server {
                 if exists {
                     db_path = key.clone();
                     opened_db = Arc::clone(db);
-                    should_open = false;
-                    break;
+                    let client = Client {
+                        stream,
+                        db: opened_db,
+                        user,
+                    };
+                    thread::spawn(|| {
+                        Self::handle_client(client);
+                    });
+                    continue 'outer;
                 }
             }
-            if should_open {
-                let opened_db = match self.open_new_db(db_path.clone()) {
-                    Ok(db) => db,
-                    Err(_) => {
-                        Self::send_connect_error(stream, ConnectError::OpenFileError)?;
-                        continue;
-                    },
-                };
-            }
+
+            opened_db = match self.open_new_db(db_path.clone()) {
+                Ok(db) => db,
+                Err(_) => {
+                    Self::send_connect_error(stream, ConnectError::OpenFileError)?;
+                    continue;
+                },
+            };
             let client = Client {
                 stream,
                 db: opened_db,
@@ -97,6 +127,7 @@ impl Server {
             thread::spawn(|| {
                 Self::handle_client(client);
             });
+
         }
         Ok(())
     }
@@ -157,8 +188,13 @@ impl Server {
                 }
             }
             OperateRequest::Delete { key } => {
+                if client.user.level != "3" && client.user.level != "4" {
+                    let result = bincode::serialize(&OperateResult::PermissionDenied)?;
+                    client.stream.write(result .as_slice())?;
+                    return Ok(());
+                }
                 match client.db.lock().unwrap().delete(&key) {
-                    Ok(v) => {
+                    Ok(_s) => {
                         let value = bincode::serialize(&OperateResult::Success(Value::Null))?;
                         client.stream.write(value.as_slice())?;
                         return Ok(());
@@ -167,8 +203,13 @@ impl Server {
                 }
             }
             OperateRequest::Add { key, value } => {
+                if client.user.level != "2" && client.user.level != "3" && client.user.level != "4" {
+                    let result = bincode::serialize(&OperateResult::PermissionDenied)?;
+                    client.stream.write(result.as_slice())?;
+                    return Ok(());
+                }
                 match client.db.lock().unwrap().add(&key,value) {
-                    Ok(v) => {
+                    Ok(_) => {
                         let value = bincode::serialize(&OperateResult::Success(Value::Null))?;
                         client.stream.write(value.as_slice())?;
                         return Ok(());
@@ -182,7 +223,7 @@ impl Server {
 }
 
 #[derive(Deserialize,Serialize)]
-pub struct Config {
+struct Config {
     name: String,
     ip: String,
     port: String,
