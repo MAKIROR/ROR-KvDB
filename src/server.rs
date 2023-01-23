@@ -57,22 +57,22 @@ impl Server {
             let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
                 Ok(buf) => buf,
                 Err(_) => {
-                    Self::send_connect_error(stream, ConnectError::RequestError)?;
+                    Self::send_connect_error(stream, ConnectError::RequestError);
                     continue;
                 },
             };
-            let user = match User::login(head.user_name,head.user_password) {
+            let user = match User::login(head.user_name,head.password) {
                 Ok(u) => u,
-                Err(UserError::UserNotFound(_)) => {
-                    Self::send_connect_error(stream, ConnectError::UsernameError)?;
+                Err(UserError::UserNotFound(n)) => {
+                    Self::send_connect_error(stream, ConnectError::UserNotFound(n));
                     continue;
                 },
                 Err(UserError::WrongPassWord) => {
-                    Self::send_connect_error(stream, ConnectError::PasswordError)?;
+                    Self::send_connect_error(stream, ConnectError::PasswordError);
                     continue;
                 },
                 Err(e) => {
-                    Self::send_connect_error(stream, ConnectError::ServerError)?;
+                    Self::send_connect_error(stream, ConnectError::ServerError);
                     return Err(RorError::UserError(e))
                 }
             };
@@ -83,7 +83,7 @@ impl Server {
             let mut db_path = match db_path_buf.into_os_string().into_string() {
                 Ok(s) => s,
                 Err(_) => {
-                    Self::send_connect_error(stream, ConnectError::PathError)?;
+                    Self::send_connect_error(stream, ConnectError::PathError);
                     continue;
                 },
             };
@@ -93,13 +93,16 @@ impl Server {
                 let exists = match is_same_file(&key, &db_path) {
                     Ok(b) => b,
                     Err(_) => {
-                        Self::send_connect_error(stream, ConnectError::FileError)?;
+                        Self::send_connect_error(stream, ConnectError::ServerError);
                         continue 'outer;
                     },
                 };
                 if exists {
                     db_path = key.clone();
                     opened_db = Arc::clone(db);
+                    if let Err(_) = Self::send_connect_reply(&mut stream, &user){
+                        stream.shutdown(Shutdown::Both);
+                    }
                     let client = Client {
                         stream,
                         db: opened_db,
@@ -115,10 +118,13 @@ impl Server {
             opened_db = match self.open_new_db(db_path.clone()) {
                 Ok(db) => db,
                 Err(_) => {
-                    Self::send_connect_error(stream, ConnectError::OpenFileError)?;
+                    Self::send_connect_error(stream, ConnectError::OpenFileError);
                     continue;
                 },
             };
+            if let Err(_) = Self::send_connect_reply(&mut stream, &user){
+                stream.shutdown(Shutdown::Both);
+            }
             let client = Client {
                 stream,
                 db: opened_db,
@@ -137,13 +143,17 @@ impl Server {
         stream.shutdown(Shutdown::Both);
         Ok(())
     }
+    fn send_connect_reply(stream: &mut TcpStream, user: &User) -> Result<()> {
+        let msg_bytes = bincode::serialize(&ConnectReply::Success(user.clone()))?;
+        stream.write(msg_bytes.as_slice());
+        Ok(())
+    }
     fn handle_client(mut client: Client) {
         loop {
             let mut cmd_buffer: Vec<u8> = Vec::new();
             let read_result = client.stream.read(&mut cmd_buffer);
             match read_result {
                 Ok(buf_len) => {
-                    drop(read_result);
                     if buf_len == 0 {
                         continue;
                     }
@@ -158,7 +168,6 @@ impl Server {
                     todo!();
                 },
                 Err(_) => {
-                    drop(read_result);
                     client.stream.shutdown(Shutdown::Both).unwrap();
                     break;
                 }

@@ -6,10 +6,11 @@ use super::{
         kv::DataStore,
     },
     user::user_error::UserError,
+    request::ConnectError,
 };
 
 #[derive(Error, Debug)]
-pub enum RorError<T> {
+pub enum RorError {
     #[error("IO error: {0}")]
     IOError(#[from] std::io::Error),
     #[error("{0}")]
@@ -32,10 +33,22 @@ pub enum RorError<T> {
     UnknownType(String),
     #[error("Unknown command '{0}'")]
     UnknownCommand(String),
-    #[error("{0}")]
-    PoisonError(#[from] PoisonError<T>),
+    #[error("Unable to connect to server: {0}")]
+    ConnectFailed(String),
+    #[error("Unable to open datafile")]
+    OpenFileFailed,
+    #[error("The server cannot parse the request correctly")]
+    RequestError,
+    #[error("The server cannot parse the path correctly")]
+    PathError,
+    #[error("The server encountered an unexpected error")]
+    ServerError,
+    #[error("Unable to communicate with the server, the connection may be interrupted, you can try to reconnect or check the server")]
+    ConnectionLost,
+    #[error("Unable to parse data, probably it is incomplete")]
+    IncompleteData,
     #[error("Unknown error")]
     Unknown,
 }
 
-pub type Result<T> = std::result::Result<T, RorError<T>>;
+pub type Result<T> = std::result::Result<T, RorError>;

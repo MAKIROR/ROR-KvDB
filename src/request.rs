@@ -1,25 +1,30 @@
-use super::store::kv::Value;
+use super::{
+    store::kv::Value,
+    user::{
+        user::User,
+        user_error::UserError,
+    },
+};
 use serde::{Serialize,Deserialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct ConnectRequest {
     pub db_path: String,
     pub user_name: String,
-    pub user_password: String,
+    pub password: String,
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum ConnectReply {
-    Success,
+    Success(User),
     Error(ConnectError),
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum ConnectError {
     RequestError,
-    UsernameError,
+    UserNotFound(String),
     PasswordError,
-    FileError,
     OpenFileError,
     PathError,
     ServerError,
