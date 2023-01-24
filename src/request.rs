@@ -7,7 +7,7 @@ use super::{
 };
 use serde::{Serialize,Deserialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ConnectRequest {
     pub db_path: String,
     pub user_name: String,
@@ -35,6 +35,7 @@ pub enum OperateRequest {
     Get { key: String },
     Add { key: String, value: Value },
     Delete { key: String },
+    Quit,
 }
 
 #[derive(Serialize, Deserialize)]

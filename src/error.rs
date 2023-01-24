@@ -23,6 +23,7 @@ pub enum RorError {
     KvError(#[from] KvError),
     #[error("Error from user module :{0}")]
     UserError(#[from] UserError),
+
     #[error("Datafile Not found :{0}")]
     DataFileNotFound(String),
     #[error("Cannot convert '{0}' to {1}")]
@@ -33,6 +34,10 @@ pub enum RorError {
     UnknownType(String),
     #[error("Unknown command '{0}'")]
     UnknownCommand(String),
+
+    #[error("The client actively disconnected")]
+    Disconnect,
+
     #[error("Unable to connect to server: {0}")]
     ConnectFailed(String),
     #[error("Unable to open datafile")]

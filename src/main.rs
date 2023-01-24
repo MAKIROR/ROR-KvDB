@@ -2,9 +2,16 @@ use std::{
     env,
     io::{self, Write},
 };
+use rdb::RemoteRepl;
+use rdb::Server;
 
 fn main() {
+    let mut r = RemoteRepl::new("127.0.0.1","11451","makiror","123456","test.data").unwrap();
     /*
+    let mut s = Server::new();
+    s.start().unwrap();
+
+
     let mut args: Vec<String> = env::args().collect();
     if args.len() == 1 {
         let p = input_path();

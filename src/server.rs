@@ -8,6 +8,7 @@ use std::{
     collections::HashMap,
     sync::{Arc,Mutex},
     thread,
+    time,
     path::PathBuf,
 };
 use super::{
@@ -21,6 +22,7 @@ use super::{
 };
 use serde::{Serialize,Deserialize};
 use same_file::is_same_file;
+use chrono::prelude::Local;
 use bincode;
 
 pub struct Client {
@@ -47,16 +49,18 @@ impl Server {
     }
     pub fn start(&mut self) -> Result<()> {
         let address = self.config.ip.clone() + ":" + &self.config.port.clone();
-        let listener = TcpListener::bind(address)?;
-
+        let listener = TcpListener::bind(address.clone())?;
+        output_prompt(format!("Server start: {}", address).as_str());
         'outer: loop {
-            let (mut stream, _) = listener.accept()?;
+            let (mut stream, adr) = listener.accept()?;
+            output_prompt(format!("New connection: {}", adr).as_str());
 
             let mut head_buffer: Vec<u8> = Vec::new();
-            stream.read(&mut head_buffer);
+            stream.read(&mut head_buffer)?;
             let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
                 Ok(buf) => buf,
-                Err(_) => {
+                Err(e) => {
+                    println!("{}",e);
                     Self::send_connect_error(stream, ConnectError::RequestError);
                     continue;
                 },
@@ -88,7 +92,7 @@ impl Server {
                 },
             };
 
-            let mut opened_db;
+            let opened_db;
             for (key, db) in &self.dbs {
                 let exists = match is_same_file(&key, &db_path) {
                     Ok(b) => b,
@@ -165,7 +169,15 @@ impl Server {
                             continue;
                         }
                     };
-                    todo!();
+                    match Self::match_command(&mut client,command) {
+                        Ok(()) => continue,
+                        Err(RorError::Disconnect) => break,
+                        Err(e) => {
+                            let err = bincode::serialize(&OperateResult::Failure).unwrap();
+                            client.stream.write(err.as_slice()).unwrap();
+                            continue;
+                        }
+                    }
                 },
                 Err(_) => {
                     client.stream.shutdown(Shutdown::Both).unwrap();
@@ -184,7 +196,7 @@ impl Server {
         self.dbs.insert( path.clone(), db );
         Ok(arc_clone_db)
     }
-    fn match_command(&mut self, client: &mut Client, command: OperateRequest) -> Result<()> {
+    fn match_command(client: &mut Client, command: OperateRequest) -> Result<()> {
         match command {
             OperateRequest::Get { key } => {
                 match client.db.lock().unwrap().get(&key) {
@@ -226,8 +238,11 @@ impl Server {
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
+            OperateRequest::Quit => {
+                client.stream.shutdown(Shutdown::Both);
+                return Err(RorError::Disconnect);
+            },
         }
-
     }
 }
 
@@ -265,4 +280,9 @@ impl Config {
         write!(file, "{}", toml)?;
         Ok(())
     }
+}
+
+fn output_prompt(content: &str) {
+    let time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    println!("[{0}] {1}",time,content);
 }

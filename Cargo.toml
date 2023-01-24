@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 base64 = "0.21.0"
 bincode = "1.2.1"
+chrono = "0.4.23"
 regex = "1.7.1"
 same-file = "1.0.6"
 serde = { version = "1.0.151", features = ["derive"] }

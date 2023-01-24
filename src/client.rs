@@ -4,6 +4,8 @@ use std::{
         Read,
         Write,
     },
+    thread,
+    time,
 };
 use super::{
     error::{RorError,Result},
@@ -21,20 +23,30 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn connect(ip: &str, port: &str, user_name: &str, password: &str, db_path: &str) -> Result<Self> {
-        let address = ip.to_owned() + port;
+    pub fn connect(
+        ip: String, 
+        port: String, 
+        user_name: String, 
+        password: String, 
+        db_path: String
+    ) -> Result<Self> {
+        let address = ip.clone() + ":" + &port;
         let mut stream = match TcpStream::connect(&address) {
             Ok(s) => s,
-            Err(_) => return Err(RorError::ConnectFailed(address.to_string())),
+            Err(e) => {
+                println!("{}",e);
+                return Err(RorError::ConnectFailed(address));
+            },
         };
         let head = ConnectRequest {
-            db_path: db_path.to_string(),
-            user_name: user_name.to_string(),
-            password: password.to_string(),
+            db_path: db_path,
+            user_name: user_name,
+            password: password,
         };
         stream.write(bincode::serialize(&head)?.as_slice())?;
         let mut result_buffer: Vec<u8> = Vec::new();
         stream.read(&mut result_buffer)?;
+
         let result: ConnectReply = bincode::deserialize(&result_buffer)?;
         match result {
             ConnectReply::Success(user) => return Ok(Client {stream,user}),
@@ -47,14 +59,14 @@ impl Client {
         }
     }
     pub fn operate(&mut self, request: OperateRequest) -> Result<OperateResult> {
-        match self.stream.write(bincode::serialize(&request)?) {
-            Ok() => {
+        match self.stream.write(&bincode::serialize(&request)?) {
+            Ok(_) => {
                 let mut reply_buffer: Vec<u8> = Vec::new();
-                stream.read(&mut reply_buffer);
+                self.stream.read(&mut reply_buffer);
                 let reply: OperateResult = match bincode::deserialize(&reply_buffer) {
                     Ok(r) => r,
-                    Err(_) => Err(RorError::IncompleteData),
-                }
+                    Err(_) => return Err(RorError::IncompleteData),
+                };
                 return Ok(reply);
             },
             Err(_) => return Err(RorError::ConnectionLost),
