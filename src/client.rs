@@ -9,7 +9,7 @@ use std::{
 };
 use super::{
     error::{RorError,Result},
-    store::kv::{DataStore,Value},
+    store::kv::{DataStore,Value,USIZE_SIZE},
     user::{
         user::User,
         user_error::UserError,
@@ -38,16 +38,20 @@ impl Client {
                 return Err(RorError::ConnectFailed(address));
             },
         };
-        let head = ConnectRequest {
-            db_path: db_path,
-            user_name: user_name,
-            password: password,
-        };
-        stream.write(bincode::serialize(&head)?.as_slice())?;
-        let mut result_buffer: Vec<u8> = Vec::new();
-        stream.read(&mut result_buffer)?;
 
-        let result: ConnectReply = bincode::deserialize(&result_buffer)?;
+        {
+            let body = ConnectRequest::new(db_path,user_name,password);
+            let (buf,_) = body.as_bytes()?;
+            stream.write(&buf.as_slice())?;
+        }
+
+        let mut size_buffer = [0 as u8; USIZE_SIZE];
+        stream.read_exact(&mut size_buffer)?;
+        let reply_size = usize::from_be_bytes(size_buffer);
+        let mut reply_buffer = vec![0; reply_size];
+        stream.read_exact(&mut reply_buffer)?;
+
+        let result: ConnectReply = bincode::deserialize(&reply_buffer)?;
         match result {
             ConnectReply::Success(user) => return Ok(Client {stream,user}),
             ConnectReply::Error(ConnectError::UserNotFound(name)) => return Err(RorError::UserError(UserError::UserNotFound(name))),
@@ -61,8 +65,13 @@ impl Client {
     pub fn operate(&mut self, request: OperateRequest) -> Result<OperateResult> {
         match self.stream.write(&bincode::serialize(&request)?) {
             Ok(_) => {
-                let mut reply_buffer: Vec<u8> = Vec::new();
-                self.stream.read(&mut reply_buffer);
+
+                let mut size_buffer = [0 as u8; USIZE_SIZE];
+                self.stream.read_exact(&mut size_buffer)?;
+                let reply_size = usize::from_be_bytes(size_buffer);
+                let mut reply_buffer = vec![0; reply_size];
+                self.stream.read_exact(&mut reply_buffer)?;
+
                 let reply: OperateResult = match bincode::deserialize(&reply_buffer) {
                     Ok(r) => r,
                     Err(_) => return Err(RorError::IncompleteData),

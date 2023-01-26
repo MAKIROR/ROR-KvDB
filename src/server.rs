@@ -3,7 +3,7 @@ use std::{
         Read,
         Write,
     },
-    net::{TcpListener, TcpStream, Shutdown},
+    net::{TcpListener, TcpStream, Shutdown, SocketAddr},
     fs::File,
     collections::HashMap,
     sync::{Arc,Mutex},
@@ -13,7 +13,7 @@ use std::{
 };
 use super::{
     error::{RorError,Result},
-    store::kv::{DataStore,Value},
+    store::kv::{DataStore,Value,USIZE_SIZE},
     user::{
         user::User,
         user_error::UserError,
@@ -55,101 +55,128 @@ impl Server {
             let (mut stream, adr) = listener.accept()?;
             output_prompt(format!("New connection: {}", adr).as_str());
 
-            let mut head_buffer: Vec<u8> = Vec::new();
-            stream.read(&mut head_buffer)?;
-            let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
-                Ok(buf) => buf,
-                Err(e) => {
-                    println!("{}",e);
-                    Self::send_connect_error(stream, ConnectError::RequestError);
-                    continue;
-                },
-            };
-            let user = match User::login(head.user_name,head.password) {
-                Ok(u) => u,
-                Err(UserError::UserNotFound(n)) => {
-                    Self::send_connect_error(stream, ConnectError::UserNotFound(n));
-                    continue;
-                },
-                Err(UserError::WrongPassWord) => {
-                    Self::send_connect_error(stream, ConnectError::PasswordError);
-                    continue;
-                },
-                Err(e) => {
-                    Self::send_connect_error(stream, ConnectError::ServerError);
-                    return Err(RorError::UserError(e))
-                }
-            };
-
-            let mut db_path_buf = PathBuf::new();
-            db_path_buf.push(&self.config.data_path);
-            db_path_buf.push(&head.db_path);
-            let mut db_path = match db_path_buf.into_os_string().into_string() {
-                Ok(s) => s,
-                Err(_) => {
-                    Self::send_connect_error(stream, ConnectError::PathError);
-                    continue;
-                },
-            };
-
-            let opened_db;
-            for (key, db) in &self.dbs {
-                let exists = match is_same_file(&key, &db_path) {
-                    Ok(b) => b,
-                    Err(_) => {
-                        Self::send_connect_error(stream, ConnectError::ServerError);
-                        continue 'outer;
-                    },
-                };
-                if exists {
-                    db_path = key.clone();
-                    opened_db = Arc::clone(db);
-                    if let Err(_) = Self::send_connect_reply(&mut stream, &user){
-                        stream.shutdown(Shutdown::Both);
-                    }
-                    let client = Client {
-                        stream,
-                        db: opened_db,
-                        user,
-                    };
-                    thread::spawn(|| {
-                        Self::handle_client(client);
-                    });
-                    continue 'outer;
-                }
+            match self.handle_connection(stream,adr) {
+                Ok(()) => continue,
+                Err(e) => output_prompt(
+                    format!("Client [{0}], failed to login. reason: {1}", 
+                        adr, 
+                        e,
+                    ).as_str()
+                ),
             }
-
-            opened_db = match self.open_new_db(db_path.clone()) {
-                Ok(db) => db,
-                Err(_) => {
-                    Self::send_connect_error(stream, ConnectError::OpenFileError);
-                    continue;
-                },
-            };
-            if let Err(_) = Self::send_connect_reply(&mut stream, &user){
-                stream.shutdown(Shutdown::Both);
-            }
-            let client = Client {
-                stream,
-                db: opened_db,
-                user,
-            };
-            thread::spawn(|| {
-                Self::handle_client(client);
-            });
-
         }
         Ok(())
     }
+    fn handle_connection(&mut self, mut stream: TcpStream, address: SocketAddr) -> Result<()> {
+        let mut size_buffer = [0 as u8; USIZE_SIZE];
+        stream.read_exact(&mut size_buffer)?;
+        let size = usize::from_be_bytes(size_buffer);
+        let mut head_buffer = vec![0; size];
+        stream.read_exact(&mut head_buffer)?;
+
+        let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
+            Ok(buf) => buf,
+            Err(e) => {
+                Self::send_connect_error(stream, ConnectError::RequestError)?;
+                return Err(RorError::BincodeError(e));
+            },
+        };
+        let user = match User::login(head.user_name,head.password) {
+            Ok(u) => u,
+            Err(UserError::UserNotFound(n)) => {
+                Self::send_connect_error(stream, ConnectError::UserNotFound(n.clone()))?;
+                return Err(RorError::UserError(UserError::UserNotFound(n)));
+            },
+            Err(UserError::WrongPassWord) => {
+                Self::send_connect_error(stream, ConnectError::PasswordError)?;
+                return Err(RorError::UserError(UserError::WrongPassWord));
+            },
+            Err(UserError::SerdeJsonError(e)) => {
+                Self::send_connect_error(stream, ConnectError::ServerError)?;
+                return Err(RorError::UserError(UserError::SerdeJsonError(e)));
+            }
+            Err(e) => {
+                Self::send_connect_error(stream, ConnectError::ServerError)?;
+                return Err(RorError::UserError(e));
+            }
+        };
+
+        let mut db_path_buf = PathBuf::new();
+        db_path_buf.push(&self.config.data_path);
+        db_path_buf.push(&head.db_path);
+        let mut db_path = match db_path_buf.into_os_string().into_string() {
+            Ok(s) => s,
+            Err(e) => {
+                Self::send_connect_error(stream, ConnectError::PathError)?;
+                return Err(RorError::PathError);
+            },
+        };
+
+        let opened_db;
+        for (key, db) in &self.dbs {
+            let exists = match is_same_file(&key, &db_path) {
+                Ok(b) => b,
+                Err(e) => {
+                    Self::send_connect_error(stream, ConnectError::ServerError)?;
+                    return Err(RorError::IOError(e));
+                },
+            };
+            if exists {
+                db_path = key.clone();
+                opened_db = Arc::clone(db);
+                if let Err(_) = Self::send_connect_reply(&mut stream, &user){
+                    stream.shutdown(Shutdown::Both)?;
+                }
+                let client = Client {
+                    stream,
+                    db: opened_db,
+                    user,
+                };
+                thread::spawn(|| {
+                    Self::handle_client(client);
+                });
+                return Ok(())
+            }
+        }
+        opened_db = match self.open_new_db(db_path.clone()) {
+            Ok(db) => db,
+            Err(e) => {
+                Self::send_connect_error(stream, ConnectError::OpenFileError)?;
+                return Err(e);
+            },
+        };
+        if let Err(_) = Self::send_connect_reply(&mut stream, &user) {
+            stream.shutdown(Shutdown::Both)?;
+        }
+        let client = Client {
+            stream,
+            db: opened_db,
+            user,
+        };
+        thread::spawn(|| {
+            Self::handle_client(client);
+        });
+        Ok(())
+    }
+
+
     fn send_connect_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
         let err_bytes = bincode::serialize(&ConnectReply::Error(err))?;
-        stream.write(err_bytes.as_slice());
-        stream.shutdown(Shutdown::Both);
+        let size = err_bytes.len();
+        let mut buf = vec![0; USIZE_SIZE + size];
+        buf[0..USIZE_SIZE].copy_from_slice(&size.to_be_bytes());
+        buf[USIZE_SIZE..].copy_from_slice(&err_bytes);
+        stream.write(buf.as_slice())?;
+        stream.shutdown(Shutdown::Both)?;
         Ok(())
     }
     fn send_connect_reply(stream: &mut TcpStream, user: &User) -> Result<()> {
         let msg_bytes = bincode::serialize(&ConnectReply::Success(user.clone()))?;
-        stream.write(msg_bytes.as_slice());
+        let size = msg_bytes.len();
+        let mut buf = vec![0; USIZE_SIZE + size];
+        buf[0..USIZE_SIZE].copy_from_slice(&size.to_be_bytes());
+        buf[USIZE_SIZE..].copy_from_slice(&msg_bytes);
+        stream.write(buf.as_slice())?;
         Ok(())
     }
     fn handle_client(mut client: Client) {
@@ -239,7 +266,7 @@ impl Server {
                 }
             }
             OperateRequest::Quit => {
-                client.stream.shutdown(Shutdown::Both);
+                client.stream.shutdown(Shutdown::Both)?;
                 return Err(RorError::Disconnect);
             },
         }
@@ -282,7 +309,7 @@ impl Config {
     }
 }
 
-fn output_prompt(content: &str) {
+fn output_prompt<T: std::fmt::Display>(content: T) {
     let time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     println!("[{0}] {1}",time,content);
 }

@@ -163,7 +163,7 @@ impl RemoteRepl {
         password: &str, 
         db_path: &str
     ) -> Result<Self> {
-        let mut client = Client::connect(
+        let client = Client::connect(
             ip.to_string(),
             port.to_string(),
             user_name.to_string(),

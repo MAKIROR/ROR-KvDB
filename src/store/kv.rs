@@ -16,7 +16,7 @@ use bincode;
 use serde::{Serialize,Deserialize};
 use super::kv_error::{KvError,Result};
 
-const USIZE_SIZE: usize = std::mem::size_of::<usize>();
+pub const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
