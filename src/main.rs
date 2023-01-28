@@ -2,7 +2,6 @@ use std::{
     env,
     io::{self, Write},
 };
-use rdb::RemoteRepl;
 use rdb::Server;
 use rdb::User;
 

@@ -1,4 +1,6 @@
 use rdb::RemoteRepl;
+use rdb::OperateRequest;
+use std::net::{TcpListener, TcpStream, Shutdown, SocketAddr};
 
 #[test]
 fn run_repl() {

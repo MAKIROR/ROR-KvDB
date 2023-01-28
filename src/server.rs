@@ -2,6 +2,8 @@ use std::{
     io::{
         Read,
         Write,
+        BufReader,
+        ErrorKind,
     },
     net::{TcpListener, TcpStream, Shutdown, SocketAddr},
     fs::File,
@@ -13,7 +15,10 @@ use std::{
 };
 use super::{
     error::{RorError,Result},
-    store::kv::{DataStore,Value,USIZE_SIZE},
+    store::{
+        kv::{DataStore,Value,USIZE_SIZE},
+        kv_error::KvError,
+    },
     user::{
         user::User,
         user_error::UserError,
@@ -29,6 +34,9 @@ pub struct Client {
     stream: TcpStream,
     db: Arc<Mutex<DataStore>>,
     user: User,
+    address: SocketAddr,
+    timeout: u64,
+    set_timeout: u64,
 }
 
 pub struct Server {
@@ -40,7 +48,10 @@ impl Server {
     pub fn new() -> Self {
         let config: Config = match Config::get_server() {
             Ok(config) => config,
-            Err(_e) => Config::default(),
+            Err(e) => {
+                output_prompt(format!("Could not read configuration file: {0}", e).as_str());
+                Config::default()
+            }
         };
         return Self {
             config,
@@ -131,9 +142,12 @@ impl Server {
                     stream,
                     db: opened_db,
                     user,
+                    address,
+                    timeout: 0,
+                    set_timeout: self.config.timeout.clone(),
                 };
                 thread::spawn(|| {
-                    Self::handle_client(client);
+                    client.handle_client();
                 });
                 return Ok(())
             }
@@ -152,14 +166,15 @@ impl Server {
             stream,
             db: opened_db,
             user,
+            address,
+            timeout: 0,
+            set_timeout: self.config.timeout.clone(),
         };
         thread::spawn(|| {
-            Self::handle_client(client);
+            client.handle_client();
         });
         Ok(())
     }
-
-
     fn send_connect_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
         let err_bytes = bincode::serialize(&ConnectReply::Error(err))?;
         let size = err_bytes.len();
@@ -179,40 +194,7 @@ impl Server {
         stream.write(buf.as_slice())?;
         Ok(())
     }
-    fn handle_client(mut client: Client) {
-        loop {
-            let mut cmd_buffer: Vec<u8> = Vec::new();
-            let read_result = client.stream.read(&mut cmd_buffer);
-            match read_result {
-                Ok(buf_len) => {
-                    if buf_len == 0 {
-                        continue;
-                    }
-                    let command: OperateRequest = match bincode::deserialize(&cmd_buffer) {
-                        Ok(cmd) => cmd,
-                        Err(e) => {
-                            let err = bincode::serialize(&OperateResult::Failure).unwrap();
-                            client.stream.write(err.as_slice()).unwrap();
-                            continue;
-                        }
-                    };
-                    match Self::match_command(&mut client,command) {
-                        Ok(()) => continue,
-                        Err(RorError::Disconnect) => break,
-                        Err(e) => {
-                            let err = bincode::serialize(&OperateResult::Failure).unwrap();
-                            client.stream.write(err.as_slice()).unwrap();
-                            continue;
-                        }
-                    }
-                },
-                Err(_) => {
-                    client.stream.shutdown(Shutdown::Both).unwrap();
-                    break;
-                }
-            }
-        }
-    }
+
     fn open_new_db(&mut self, path: String) -> Result<Arc<Mutex<DataStore>>> {
         let db = Arc::new(
             Mutex::new(
@@ -223,50 +205,142 @@ impl Server {
         self.dbs.insert( path.clone(), db );
         Ok(arc_clone_db)
     }
-    fn match_command(client: &mut Client, command: OperateRequest) -> Result<()> {
+
+}
+
+impl Client {
+    fn handle_client(mut self) {
+        let stream_clone = match self.stream.try_clone() {
+            Ok(s) => s,
+            Err(_) => {
+                output_prompt(format!("C[{0}] The reader cannot be created by the clone method, and the client is disconnected", self.address).as_str());
+                Server::send_connect_error(self.stream, ConnectError::ServerError);
+                return;
+            }
+        };
+        let mut reader = BufReader::new(stream_clone);
+        loop {
+            thread::sleep(time::Duration::from_secs(1 as u64));
+
+            if self.timeout >= self.set_timeout {
+                output_prompt(format!("Client [{0}] activity timeout", self.address).as_str());
+                let _ = self.stream.shutdown(Shutdown::Both);
+                break;
+            }
+            match &self.accept_request(&mut reader) {
+                Ok(()) => continue,
+                Err(RorError::Disconnect) => {
+                    output_prompt(format!("Client [{0}] disconnected", self.address).as_str());
+                    let _ = self.stream.shutdown(Shutdown::Both);
+                    break;
+                },
+                Err(RorError::KvError(e)) => output_prompt(format!("An error occurred on client [{0}], buffer flushed and error message sent. {1}",self.address,e).as_str()),
+                Err(e) => {
+                    output_prompt(format!("An error occurred on client [{0}]. It may be fatal, the connection was forcibly terminated. {1}",self.address,e).as_str());
+                    if let Err(_) = self.stream.shutdown(Shutdown::Both) {
+                        output_prompt(format!("Client [{0}] unable to properly disconnect, thread has been forcibly closed",self.address).as_str());
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    fn accept_request(&mut self, reader: &mut BufReader<TcpStream>) -> Result<()> {
+        let mut size_buffer = [0 as u8; USIZE_SIZE];
+        match reader.read_exact(&mut size_buffer) {
+            Ok(_) => self.timeout = 0,
+            Err(e) => {
+                if e.kind() == ErrorKind::UnexpectedEof {
+                    self.timeout += 1;
+                    return Ok(());
+                }
+                return Err(RorError::IOError(e));
+            }
+        }
+        let body_size = usize::from_be_bytes(size_buffer);
+        let mut body_buffer = vec![0; body_size];
+        match reader.read(&mut body_buffer) {
+            Ok(_) => (),
+            Err(e) => return Ok(()),
+        }
+        let op: OperateRequest = bincode::deserialize(&body_buffer)?;
+
+        match self.match_command(op) {
+            Ok(OperateResult::Success(v)) => {
+                let msg = Message::new(OperateResult::Success(v));
+                let (buf,_) = msg.as_bytes()?;
+                self.stream.write(&buf)?;
+                return Ok(());
+            }
+            Ok(OperateResult::PermissionDenied) => {
+                let msg = Message::new(OperateResult::PermissionDenied);
+                let (buf,_) = msg.as_bytes()?;
+                self.stream.write(&buf)?;
+                return Ok(());
+            }
+            Ok(OperateResult::KeyNotFound(s)) => {
+                let msg = Message::new(OperateResult::KeyNotFound(s));
+                let (buf,_) = msg.as_bytes()?;
+                self.stream.write(&buf)?;
+                return Ok(());
+            }
+            Ok(OperateResult::Failure) => {
+                let msg = Message::new(OperateResult::Failure);
+                let (buf,_) = msg.as_bytes()?;
+                self.stream.write(&buf)?;
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        }
+        self.stream.flush()?;
+    }
+    fn match_command(&mut self, command: OperateRequest) -> Result<OperateResult> {
         match command {
             OperateRequest::Get { key } => {
-                match client.db.lock().unwrap().get(&key) {
+                match self.db.lock().unwrap().get(&key) {
                     Ok(v) => {
-                        let value = bincode::serialize(&OperateResult::Success(v))?;
-                        client.stream.write(value.as_slice())?;
-                        return Ok(());
+                        return Ok(OperateResult::Success(v));
                     }
+                    Err(KvError::KeyNotFound(s)) => return Ok(OperateResult::KeyNotFound(s)),
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
             OperateRequest::Delete { key } => {
-                if client.user.level != "3" && client.user.level != "4" {
-                    let result = bincode::serialize(&OperateResult::PermissionDenied)?;
-                    client.stream.write(result .as_slice())?;
-                    return Ok(());
+                if self.user.level != "3" && self.user.level != "4" {
+                    return Ok(OperateResult::PermissionDenied);
                 }
-                match client.db.lock().unwrap().delete(&key) {
-                    Ok(_s) => {
-                        let value = bincode::serialize(&OperateResult::Success(Value::Null))?;
-                        client.stream.write(value.as_slice())?;
-                        return Ok(());
+                match self.db.lock().unwrap().delete(&key) {
+                    Ok(_) => {
+                        return Ok(OperateResult::Success(Value::Null));
                     }
+                    Err(KvError::KeyNotFound(s)) => return Ok(OperateResult::KeyNotFound(s)),
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
             OperateRequest::Add { key, value } => {
-                if client.user.level != "2" && client.user.level != "3" && client.user.level != "4" {
-                    let result = bincode::serialize(&OperateResult::PermissionDenied)?;
-                    client.stream.write(result.as_slice())?;
-                    return Ok(());
+                if self.user.level != "2" && self.user.level != "3" && self.user.level != "4" {
+                    return Ok(OperateResult::PermissionDenied);
                 }
-                match client.db.lock().unwrap().add(&key,value) {
+                match self.db.lock().unwrap().add(&key,value) {
                     Ok(_) => {
-                        let value = bincode::serialize(&OperateResult::Success(Value::Null))?;
-                        client.stream.write(value.as_slice())?;
-                        return Ok(());
+                        return Ok(OperateResult::Success(Value::Null));
+                    }
+                    Err(e) => return Err(RorError::KvError(e)),
+                }
+            }
+            OperateRequest::Compact => {
+                if self.user.level != "2" && self.user.level != "3" && self.user.level != "4" {
+                    return Ok(OperateResult::PermissionDenied);
+                }
+                match self.db.lock().unwrap().compact() {
+                    Ok(_) => {
+                        return Ok(OperateResult::Success(Value::Null));
                     }
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
             OperateRequest::Quit => {
-                client.stream.shutdown(Shutdown::Both)?;
+                self.stream.shutdown(Shutdown::Both)?;
                 return Err(RorError::Disconnect);
             },
         }
@@ -278,9 +352,10 @@ struct Config {
     name: String,
     ip: String,
     port: String,
-    worker_id: i64,
-    data_center_id: i64,
+    worker_id: u64,
+    data_center_id: u64,
     data_path: String,
+    timeout: u64,
 }
 
 impl Config {
@@ -292,6 +367,7 @@ impl Config {
             worker_id: 0,
             data_center_id: 0,
             data_path: "./data/".to_string(),
+            timeout: 300,
         }
     }
     pub fn get_server() -> Result<Self> {
@@ -300,12 +376,6 @@ impl Config {
         file.read_to_string(&mut c)?;
         let config: Config  = toml::from_str(c.as_str())?;
         Ok(config)
-    }
-    pub fn set_server(&self) -> Result<()> {
-        let mut file = File::create("config/server.toml")?;
-        let toml = toml::to_string(&self)?;
-        write!(file, "{}", toml)?;
-        Ok(())
     }
 }
 

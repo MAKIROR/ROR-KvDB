@@ -172,12 +172,14 @@ impl DataStore {
         let mut new_file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).open(new_filename.clone())?);
         let mut new_position = 0;
         let mut offset = 0;
+        let mut new_hashmap: HashMap<String, u64> = HashMap::new();
         loop {
             match self.read_with_offset(offset) {
                 Ok(entry) => {
                     let size = entry.size() as u64;
-                    if let Some(pos) = self.index.get(&entry.key){
+                    if let Some(pos) = self.index.get(&entry.key) {
                         if entry.meta.command == Command::Add && *pos == offset {
+                            new_hashmap.insert(entry.key.clone(),new_position);
                             let buf = entry.encode()?; 
                             new_file_writer.write(&buf)?;
                             new_position += size;
@@ -195,7 +197,7 @@ impl DataStore {
         self.file_reader = BufReader::new(File::open(&self.path)?);
         self.position = new_position;
         self.uncompacted = 0;
-
+        self.index = new_hashmap;
         Ok(())
     }
     fn load_hashmap(&mut self) -> Result<(HashMap<String, u64>, u64)> {

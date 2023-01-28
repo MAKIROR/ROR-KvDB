@@ -15,11 +15,11 @@ pub struct LocalRepl {
 }
 
 impl LocalRepl {
-    pub fn open(path: &str) -> Result<DataStore> {
-        let db = DataStore::open(path)?;
-        Ok(db)
+    pub fn open(path: &str) -> Result<Self> {
+        let database = DataStore::open(path)?;
+        Ok(Self{database})
     }
-    fn match_command(&mut self) -> Result<()> {
+    pub fn match_command(&mut self) -> Result<()> {
         print!("{0} > ",self.database.path);
         io::stdout().flush()?;
         let mut input = String::new();

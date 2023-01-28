@@ -40,7 +40,7 @@ impl Client {
         };
 
         {
-            let body = ConnectRequest::new(db_path,user_name,password);
+            let body = Message::new(ConnectRequest{db_path,user_name,password});
             let (buf,_) = body.as_bytes()?;
             stream.write(&buf.as_slice())?;
         }
@@ -63,7 +63,12 @@ impl Client {
         }
     }
     pub fn operate(&mut self, request: OperateRequest) -> Result<OperateResult> {
-        match self.stream.write(&bincode::serialize(&request)?) {
+
+        let body = Message::new(request);
+        let (buf,_) = body.as_bytes()?;
+        self.stream.write(&buf.as_slice())?;
+
+        match self.stream.write(&buf) {
             Ok(_) => {
 
                 let mut size_buffer = [0 as u8; USIZE_SIZE];
