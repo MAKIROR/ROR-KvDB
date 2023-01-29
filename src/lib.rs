@@ -1,7 +1,7 @@
-pub use store::kv::{DataStore,Value,Command,USIZE_SIZE};
-pub use store::kv_error::{KvError, Result};
-pub use user::user::User;
-pub use request::*;
+use store::kv::{DataStore,Value,Command,USIZE_SIZE};
+use store::kv_error::{KvError, Result};
+use user::user::User;
+use request::*;
 pub use repl::{RemoteRepl,LocalRepl};
 pub use server::Server;
 

@@ -56,6 +56,13 @@ impl User {
         } 
     }
     pub fn register(&self) -> Result<()> {
+        let config = Config::get_config()?;
+        let path_slice = Path::new(&config.path);
+        if !path_slice.exists() {
+            let mut f = File::create(&config.path)?;
+            write!(f, "{}", "[]")?;
+        } 
+
         let mut user = self.clone();
         let name_len = user.name.chars().count();
         let password_regex = Regex::new(r"^[a-zA-Z0-9_-]{4,16}$")?;
@@ -69,14 +76,9 @@ impl User {
             return Err(UserError::UserNameExists(user.name));
         }
         
-        let config = Config::get_config()?;
         if Self::count_users()? > config.user_max {
             return Err(UserError::UserLimit);
         }
-        let path_slice = Path::new(&config.path);
-        if !path_slice.exists() {
-            File::create(&config.path)?;
-        } 
         let config = Config::get_config()?;
         let original = fs::read_to_string(&config.path)?;
         let mut data: Vec<User> = Vec::new();

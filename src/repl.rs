@@ -7,6 +7,7 @@ use super::{
     },
     client::Client,
     request::OperateRequest,
+    user::user::User,
 };
 use chrono::prelude::Local;
 
@@ -122,15 +123,24 @@ impl LocalRepl {
                 };
                 println!("{}",str_value);
             }
+            "user" => {
+                if command[1] == "create" {
+                    if command.len() != 5 {
+                        return Err(RorError::ParameterError("create user".to_string()));
+                    }
+                    let mut user = User::new(0,0,command[2],command[3],command[4])?;
+                    user.register()?;
+                    println!("Successfully create user '{0}'",command[2]);   
+                }
+            }
             "quit" => Self::quit_program(),
             _ => return Err(RorError::UnknownCommand(command[0].to_string())),
         }
         Ok(())
     }
-    fn run(db: DataStore) {
-        let mut rordb = LocalRepl {database:db};
+    pub fn run(&mut self) {
         loop {
-            if let Err(e) = rordb.match_command() {
+            if let Err(e) = self.match_command() {
                 println!("{}",e);
             }
         }
@@ -157,25 +167,25 @@ pub struct RemoteRepl {
 
 impl RemoteRepl {
     pub fn new(
-        ip: &str,
-        port: &str,
-        user_name: &str, 
-        password: &str, 
-        db_path: &str
+        ip: String,
+        port: String,
+        user_name: String, 
+        password: String, 
+        db_path: String
     ) -> Result<Self> {
         let client = Client::connect(
-            ip.to_string(),
-            port.to_string(),
-            user_name.to_string(),
-            password.to_string(),
-            db_path.to_string()
+            ip.clone(),
+            port.clone(),
+            user_name.clone(),
+            password.clone(),
+            db_path.clone()
         )?;
         let info = ConnectionInfo {
-            ip: ip.to_string(),
-            port: port.to_string(),
-            user_name: user_name.to_string(),
-            password: password.to_string(),
-            db_path: db_path.to_string(),
+            ip: ip,
+            port: port,
+            user_name: user_name,
+            password: password,
+            db_path: db_path,
         };
         Ok(Self {client,info})
     }
