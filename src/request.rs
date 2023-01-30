@@ -32,6 +32,7 @@ pub enum OperateRequest {
     Get { key: String },
     Add { key: String, value: Value },
     Delete { key: String },
+    CreateUser { username: String, password: String, level: String },
     Compact,
     Quit,
 }

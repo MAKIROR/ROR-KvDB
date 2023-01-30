@@ -324,6 +324,20 @@ impl RemoteRepl {
                 };
                 println!("{}",str_value);
             }
+            "user" => {
+                if command[1] == "create" {
+                    if command.len() != 5 {
+                        return Err(RorError::ParameterError("create user".to_string()));
+                    }
+                    let op = OperateRequest::CreateUser {
+                        username: command[2].to_string(),
+                        password: command[3].to_string(),
+                        level: command[4].to_string(),
+                    };
+                    let result = self.client.operate(op)?;
+                    Self::match_op_reply(result);
+                }
+            }
             "quit" => {
                 let _ = self.client.operate(OperateRequest::Quit);
                 quit_program();

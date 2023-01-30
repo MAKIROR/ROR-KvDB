@@ -39,7 +39,8 @@ impl User {
         match level {
             "0"
             | "1"
-            | "2" => return Ok(User{
+            | "2"
+            | "3" => return Ok(User{
                 uid,
                 name: name.to_string(),
                 password: password.to_string(),

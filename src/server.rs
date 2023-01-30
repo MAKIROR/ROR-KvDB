@@ -36,7 +36,7 @@ pub struct Client {
     user: User,
     address: SocketAddr,
     timeout: u64,
-    set_timeout: u64,
+    config: Config,
 }
 
 pub struct Server {
@@ -145,7 +145,7 @@ impl Server {
                     user,
                     address,
                     timeout: 0,
-                    set_timeout: self.config.timeout.clone(),
+                    config: self.config.clone(),
                 };
                 thread::spawn(|| {
                     client.handle_client();
@@ -169,7 +169,7 @@ impl Server {
             user,
             address,
             timeout: 0,
-            set_timeout: self.config.timeout.clone(),
+            config: self.config.clone(),
         };
         thread::spawn(|| {
             client.handle_client();
@@ -223,7 +223,7 @@ impl Client {
         loop {
             thread::sleep(time::Duration::from_secs(1 as u64));
 
-            if self.timeout >= self.set_timeout {
+            if self.timeout >= self.config.timeout {
                 output_prompt(format!("Client [{0}] activity timeout", self.address).as_str());
                 let _ = self.stream.shutdown(Shutdown::Both);
                 break;
@@ -307,7 +307,7 @@ impl Client {
                 }
             }
             OperateRequest::Delete { key } => {
-                if self.user.level != "3" && self.user.level != "4" {
+                if self.user.level != "2" && self.user.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
                 match self.db.lock().unwrap().delete(&key) {
@@ -319,7 +319,7 @@ impl Client {
                 }
             }
             OperateRequest::Add { key, value } => {
-                if self.user.level != "2" && self.user.level != "3" && self.user.level != "4" {
+                if self.user.level != "1" && self.user.level != "2" && self.user.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
                 match self.db.lock().unwrap().add(&key,value) {
@@ -329,8 +329,34 @@ impl Client {
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
+            OperateRequest::CreateUser { username, password, level } => {
+                if self.user.level != "3" {
+                    return Ok(OperateResult::PermissionDenied);
+                }
+                let user = match User::new(
+                    self.config.worker_id.clone(),
+                    self.config.data_center_id.clone(),
+                    &username.as_str(),
+                    &password.as_str(),
+                    &level.as_str()
+                ) {
+                    Ok(u) => u,
+                    Err(e) => {
+                        output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e).as_str());
+                        return Ok(OperateResult::Failure);
+                    }
+                };
+
+                match user.register() {
+                    Ok(()) => return Ok(OperateResult::Success(Value::Null)),
+                    Err(e) => {
+                        output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e).as_str());
+                        return Ok(OperateResult::Failure);
+                    }
+                };
+            }
             OperateRequest::Compact => {
-                if self.user.level != "2" && self.user.level != "3" && self.user.level != "4" {
+                if self.user.level != "1" && self.user.level != "2" && self.user.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
                 match self.db.lock().unwrap().compact() {
@@ -348,13 +374,13 @@ impl Client {
     }
 }
 
-#[derive(Deserialize,Serialize)]
+#[derive(Deserialize,Serialize,Clone)]
 struct Config {
     name: String,
     ip: String,
     port: String,
-    worker_id: u64,
-    data_center_id: u64,
+    worker_id: i64,
+    data_center_id: i64,
     data_path: String,
     timeout: u64,
 }

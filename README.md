@@ -1,22 +1,105 @@
-The project is not finished yet, but you can use these functions in the tutorial version：
-https://github.com/MAKIROR/Makiror_Articles/tree/main/resource/example/Make_a_simple_KV_database_with_Rust/part1
-
 # ROR-KvDB
 A simple Key–Value Database.   
-This version does not yet provide support for remote.
 
 ## Tutorial Blog (Chinese Only) :    
 <a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust.md" target="_blank">Part 1: Basic Storage Functions</a></br>
-Part 2: User System and Network Services (unfinished)
+Part 2: User System and Network Services (writing)
 
-## Start
+## Local mode
+Enter REPL(Read-Eval-Print Loop) mode and perform database operations locally.
+
 start command:
 ```
-rdb [optional:data file path]
+rdb local -p [optional:data file path]
 ```
-## Commands
+### Commands
 Start database and you can use these commands:
 
+```
+open [data file path]
+add [key] [value] [optional: type of data]
+delete [key]
+get [key]
+compact
+user create [username] [password] [level]
+quit
+```
+<br>
+
+
+## Server mode
+Start a remote kv database that can accept client connections.(No REPL)
+
+### Configuration file
+The path to the configuration file is: ./config/server.toml
+```
+# server name
+name = "Default server"
+
+# ip (Both ipv4 and ipv6 are allowed)
+ip = "127.0.0.1"
+
+# port
+port = "11451"
+
+# Allow customization, the data type is i64, it will affect the result of "generating user uid according to configuration"
+worker_id = 0
+
+# Allow customization, the data type is i64, it will affect the result of "generating user uid according to configuration"
+data_center_id = 0
+
+# The directory for storing data files, all data files accessed by clients must be in this
+data_path = "./data/"
+
+# If the client is inactive for a certain period of time, it will automatically disconnect (Sec)
+timeout = 300
+```
+!: worker_id and data_center_id in local mode, it will not be affected by the configuration file, it will be 0.
+
+<br>
+
+## Client mode
+Connect to a remote server and start the REPL.
+### Connect
+```
+rdb connect -i [ip] -p [port] -u [user info] -f [data file]
+```
+#### example:
+```
+rdb connect -i 127.0.0.1 -p 11451 -u makiror@123456 -f test.data
+```
+When you start connect without parameters, it will ask you to enter these after the program starts.
+<br>
+
+### Commands 
+The user's level determines which commands can be used.
+```
+get [key] (all)
+add [key] [value] [optional: type of data] (level 2-4)
+delete [key] (level 3-4)
+compact (level 2-4)
+user create [username] [password] [level] (level 4)
+quit (all)
+```
+
+  But in this mode, only the result of the operation will be displayed after the operation, and there will be no detailed output like the local mode.
+
+  The path of the data file is [server preset path + parameter]. If the parameter has no folder but only the file name, the file will be create automatically.
+
+#### example
+The server will automatically create this file:
+```
+rdb connect -i 127.0.0.1 -p 11451 -u makiror@123456 -f test.data
+```
+but this will not:
+```
+rdb connect -i 127.0.0.1 -p 11451 -u makiror@123456 -f test/test.data
+```
+
+<br>
+
+## Commands
+Detailed Explanation of Database Commands.
 ### Open
 ```
 open [data file path]
