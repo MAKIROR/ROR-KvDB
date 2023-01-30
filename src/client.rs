@@ -4,22 +4,16 @@ use std::{
         Read,
         Write,
     },
-    thread,
-    time,
 };
 use super::{
     error::{RorError,Result},
-    store::kv::{DataStore,Value,USIZE_SIZE},
-    user::{
-        user::User,
-        user_error::UserError,
-    },
+    store::kv::USIZE_SIZE,
+    user::user_error::UserError,
     request::*,
 };
 
 pub struct Client {
     stream: TcpStream,
-    user: User,
 }
 
 impl Client {
@@ -53,7 +47,7 @@ impl Client {
 
         let result: ConnectReply = bincode::deserialize(&reply_buffer)?;
         match result {
-            ConnectReply::Success(user) => return Ok(Client {stream,user}),
+            ConnectReply::Success => return Ok(Client {stream}),
             ConnectReply::Error(ConnectError::UserNotFound(name)) => return Err(RorError::UserError(UserError::UserNotFound(name))),
             ConnectReply::Error(ConnectError::PasswordError) => return Err(RorError::UserError(UserError::WrongPassWord)),
             ConnectReply::Error(ConnectError::OpenFileError) => return Err(RorError::OpenFileFailed),
@@ -63,14 +57,11 @@ impl Client {
         }
     }
     pub fn operate(&mut self, request: OperateRequest) -> Result<OperateResult> {
-
         let body = Message::new(request);
         let (buf,_) = body.as_bytes()?;
-        self.stream.write(&buf.as_slice())?;
 
         match self.stream.write(&buf) {
             Ok(_) => {
-
                 let mut size_buffer = [0 as u8; USIZE_SIZE];
                 self.stream.read_exact(&mut size_buffer)?;
                 let reply_size = usize::from_be_bytes(size_buffer);

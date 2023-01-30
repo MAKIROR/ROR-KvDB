@@ -1,12 +1,7 @@
 use thiserror::Error;
-use std::sync::{MutexGuard,PoisonError};
 use super::{
-    store::{
-        kv_error::KvError,
-        kv::DataStore,
-    },
+    store::kv_error::KvError,
     user::user_error::UserError,
-    request::ConnectError,
 };
 
 #[derive(Error, Debug)]
@@ -40,13 +35,13 @@ pub enum RorError {
 
     #[error("Unable to connect to server: {0}")]
     ConnectFailed(String),
-    #[error("Unable to open datafile")]
+    #[error("Server cannot to open datafile")]
     OpenFileFailed,
-    #[error("The server cannot parse the request correctly")]
+    #[error("Server cannot parse the request correctly")]
     RequestError,
-    #[error("The server cannot parse the path correctly")]
+    #[error("Server cannot parse the path correctly")]
     PathError,
-    #[error("The server encountered an unexpected error")]
+    #[error("Server encountered an unexpected error")]
     ServerError,
     #[error("Unable to communicate with the server, the connection may be interrupted, you can try to reconnect or check the server")]
     ConnectionLost,

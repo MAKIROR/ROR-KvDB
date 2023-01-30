@@ -17,13 +17,6 @@ use serde::{Serialize,Deserialize};
 use base64::{Engine as _, engine::general_purpose};
 use toml;
 
-#[derive(Debug)]
-pub enum Verify {
-    Correct(String),
-    WrongPassWord,
-    UserNotFound,
-}
-
 #[derive(Deserialize,Serialize,Clone)]
 pub struct User {
     uid: String,
@@ -124,13 +117,22 @@ impl User {
         let data: Vec<User> = serde_json::from_str(&str_data)?;
         Ok(data.len().try_into()?)
     }
-
     fn encode(&mut self) {
         self.password = general_purpose::STANDARD_NO_PAD.encode(self.password.clone());
     }
     fn decode(&mut self) -> Result<()> {
         let bytes = general_purpose::STANDARD_NO_PAD.decode(self.password.clone())?;
         self.password = std::str::from_utf8(&bytes)?.to_string();
+        Ok(())
+    }
+    pub fn test_file() -> Result<()> {
+        let config = Config::get_config()?;
+        let path_slice = Path::new(&config.path);
+        if !path_slice.exists() {
+            let mut f = File::create(&config.path)?;
+            write!(f, "{}", "[]")?;
+            return Ok(());
+        }
         Ok(())
     }
 }

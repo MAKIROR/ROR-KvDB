@@ -62,8 +62,11 @@ impl Server {
         let address = self.config.ip.clone() + ":" + &self.config.port.clone();
         let listener = TcpListener::bind(address.clone())?;
         output_prompt(format!("Server start: {}", address).as_str());
-        'outer: loop {
-            let (mut stream, adr) = listener.accept()?;
+
+        User::test_file()?;
+
+        loop {
+            let (stream, adr) = listener.accept()?;
             output_prompt(format!("New connection: {}", adr).as_str());
 
             match self.handle_connection(stream,adr) {
@@ -76,7 +79,6 @@ impl Server {
                 ),
             }
         }
-        Ok(())
     }
     fn handle_connection(&mut self, mut stream: TcpStream, address: SocketAddr) -> Result<()> {
         let mut size_buffer = [0 as u8; USIZE_SIZE];
@@ -115,9 +117,9 @@ impl Server {
         let mut db_path_buf = PathBuf::new();
         db_path_buf.push(&self.config.data_path);
         db_path_buf.push(&head.db_path);
-        let mut db_path = match db_path_buf.into_os_string().into_string() {
+        let db_path = match db_path_buf.into_os_string().into_string() {
             Ok(s) => s,
-            Err(e) => {
+            Err(_) => {
                 Self::send_connect_error(stream, ConnectError::PathError)?;
                 return Err(RorError::PathError);
             },
@@ -133,9 +135,8 @@ impl Server {
                 },
             };
             if exists {
-                db_path = key.clone();
                 opened_db = Arc::clone(db);
-                if let Err(_) = Self::send_connect_reply(&mut stream, &user){
+                if let Err(_) = Self::send_connect_reply(&mut stream){
                     stream.shutdown(Shutdown::Both)?;
                 }
                 let client = Client {
@@ -159,7 +160,7 @@ impl Server {
                 return Err(e);
             },
         };
-        if let Err(_) = Self::send_connect_reply(&mut stream, &user) {
+        if let Err(_) = Self::send_connect_reply(&mut stream) {
             stream.shutdown(Shutdown::Both)?;
         }
         let client = Client {
@@ -185,8 +186,8 @@ impl Server {
         stream.shutdown(Shutdown::Both)?;
         Ok(())
     }
-    fn send_connect_reply(stream: &mut TcpStream, user: &User) -> Result<()> {
-        let msg_bytes = bincode::serialize(&ConnectReply::Success(user.clone()))?;
+    fn send_connect_reply(stream: &mut TcpStream) -> Result<()> {
+        let msg_bytes = bincode::serialize(&ConnectReply::Success)?;
         let size = msg_bytes.len();
         let mut buf = vec![0; USIZE_SIZE + size];
         buf[0..USIZE_SIZE].copy_from_slice(&size.to_be_bytes());
@@ -214,7 +215,7 @@ impl Client {
             Ok(s) => s,
             Err(_) => {
                 output_prompt(format!("C[{0}] The reader cannot be created by the clone method, and the client is disconnected", self.address).as_str());
-                Server::send_connect_error(self.stream, ConnectError::ServerError);
+                let _ = Server::send_connect_error(self.stream, ConnectError::ServerError);
                 return;
             }
         };
@@ -261,9 +262,10 @@ impl Client {
         let mut body_buffer = vec![0; body_size];
         match reader.read(&mut body_buffer) {
             Ok(_) => (),
-            Err(e) => return Ok(()),
+            Err(_) => return Ok(()),
         }
         let op: OperateRequest = bincode::deserialize(&body_buffer)?;
+        self.stream.flush()?;
 
         match self.match_command(op) {
             Ok(OperateResult::Success(v)) => {
@@ -292,7 +294,6 @@ impl Client {
             }
             Err(e) => return Err(e),
         }
-        self.stream.flush()?;
     }
     fn match_command(&mut self, command: OperateRequest) -> Result<OperateResult> {
         match command {

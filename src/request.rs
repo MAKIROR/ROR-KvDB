@@ -1,10 +1,6 @@
 use super::{
     store::kv::{Value,USIZE_SIZE},
-    user::{
-        user::User,
-        user_error::UserError,
-    },
-    error::{RorError,Result},
+    error::Result,
 };
 use serde::{Serialize,Deserialize,de::DeserializeOwned};
 
@@ -17,7 +13,7 @@ pub struct ConnectRequest {
 
 #[derive(Serialize, Deserialize)]
 pub enum ConnectReply {
-    Success(User),
+    Success,
     Error(ConnectError),
 }
 

@@ -30,18 +30,6 @@ fn main() {
             .arg(arg!(-f --file <VALUE> "Datafile"))
         )
     .get_matches();
-    /*
-    if let Some(matches) = matches.subcommand_matches("local") {
-        if let Some(path) = matches.get_one::<String>("path") {
-            let mut repl = LocalRepl::open(&path.as_str()).unwrap();
-            repl.run();
-        } else {
-            let path = input_something("datafile path");
-            let mut repl = LocalRepl::open(path.as_str()).unwrap();
-            repl.run();
-        }
-    }
-    */
     match matches.subcommand() {
         Some(("server",_)) => {
             let mut s = Server::new();
@@ -87,7 +75,14 @@ fn main() {
                 Some(ip) => ip.clone(),
                 None => input_something("datafile path"),
             };
-            let mut repl = RemoteRepl::new(ip,port,username,password,db_path).unwrap();
+            let mut repl = match RemoteRepl::new(ip,port,username,password,db_path) {
+                Ok(r) => r,
+                Err(e) => {
+                    println!("{}",e);
+                    std::process::exit(0);
+                }
+                
+            };
             repl.run();
         }
         _ => {

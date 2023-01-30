@@ -1,7 +1,3 @@
-use store::kv::{DataStore,Value,Command,USIZE_SIZE};
-use store::kv_error::{KvError, Result};
-use user::user::User;
-use request::*;
 pub use repl::{RemoteRepl,LocalRepl};
 pub use server::Server;
 
