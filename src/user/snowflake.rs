@@ -1,13 +1,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use super::user_error::{UserError,Result};
 
-const INIT_EPOCH: i64 = 1673701152000;
-const WORKER_ID_LEN: i64 = 5;
-const DATA_CENTER_LEN: i64 = 5;
-const SEQUENCE_LEN: i64 = 12;
-const WORKER_ID_SHIFT: i64 = SEQUENCE_LEN;
-const DATA_CENTER_SHIFT: i64 = SEQUENCE_LEN + WORKER_ID_LEN;
-const TIME_STAMP_SHIFT: i64 = SEQUENCE_LEN + WORKER_ID_LEN + DATA_CENTER_LEN;
+const INIT_EPOCH: i64 = 1672502401000;
+const WORKER_ID_LEN: u64 = 5;
+const DATA_CENTER_LEN: u64 = 5;
+const SEQUENCE_LEN: u64 = 12;
+const WORKER_ID_SHIFT: u64 = SEQUENCE_LEN;
+const DATA_CENTER_SHIFT: u64 = SEQUENCE_LEN + WORKER_ID_LEN;
+const TIME_STAMP_SHIFT: u64 = SEQUENCE_LEN + WORKER_ID_LEN + DATA_CENTER_LEN;
 
 const DATA_CENTER_MAX: i64 = -1 ^ (-1 << DATA_CENTER_LEN);
 const WORKER_ID_MAX: i64 = -1 ^ (-1 << WORKER_ID_LEN);
@@ -24,7 +24,7 @@ impl Snowflake {
         if worker_id < 0 || worker_id > WORKER_ID_MAX {
             return Err(UserError::WorkerIdLengthError);
         }
-        if worker_id < 0 || worker_id > DATA_CENTER_MAX {
+        if data_center_id < 0 || data_center_id > DATA_CENTER_MAX {
             return Err(UserError::DataCenterLengthError);
         }
         Ok(Snowflake {
@@ -55,13 +55,13 @@ impl Snowflake {
         self.last_time_stamp = time;
         Ok((((time - INIT_EPOCH) << TIME_STAMP_SHIFT) | (self.data_center_id << DATA_CENTER_SHIFT) | (self.worker_id << WORKER_ID_SHIFT) | self.sequence).to_string())
     }
-}
-fn next_millis(last_time: &i64) -> Result<i64> {
-    let mut time: i64 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis().try_into()?;
-    while time <= *last_time {
-        time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis().try_into()?;
+    fn next_millis(last_time: &i64) -> Result<i64> {
+        let mut time: i64 = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis().try_into()?;
+        while time <= *last_time {
+            time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis().try_into()?;
+        }
+        Ok(time)
     }
-    Ok(time)
 }
 
 
