@@ -333,27 +333,20 @@ impl Client {
                 if self.user.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
-                let user = match User::new(
+
+                match User::register(                    
                     self.config.worker_id.clone(),
                     self.config.data_center_id.clone(),
                     &username.as_str(),
                     &password.as_str(),
                     &level.as_str()
                 ) {
-                    Ok(u) => u,
+                    Ok(_) => return Ok(OperateResult::Success(Value::Null)),
                     Err(e) => {
                         output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e).as_str());
                         return Ok(OperateResult::Failure);
                     }
-                };
-
-                match user.register() {
-                    Ok(()) => return Ok(OperateResult::Success(Value::Null)),
-                    Err(e) => {
-                        output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e).as_str());
-                        return Ok(OperateResult::Failure);
-                    }
-                };
+                }
             }
             OperateRequest::Compact => {
                 if self.user.level != "1" && self.user.level != "2" && self.user.level != "3" {

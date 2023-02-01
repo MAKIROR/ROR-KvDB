@@ -32,30 +32,7 @@ pub struct User {
 }
 
 impl User {
-    pub fn new( worker_id: i64, data_center_id: i64, name: &str, password: &str, level: &str ) -> Result<Self> {
-        let password_regex = Regex::new(r"^[a-zA-Z0-9_-]{4,16}$")?;
-        if !password_regex.is_match(&password) {
-            return Err(UserError::PassWordFormatError(password.to_string()));
-        }
-        let name_len = name.chars().count();
-        if name_len < 2 || name_len > 20 {
-            return Err(UserError::NameLengthError(name_len));
-        }
-        let uid = Snowflake::new(worker_id,data_center_id)?.generate()?;
-        match level {
-            "0"
-            | "1"
-            | "2"
-            | "3" => return Ok(User{
-                uid,
-                name: name.to_string(),
-                password: password.to_string(),
-                level: level.to_string(),
-            }),
-            _ => return Err(UserError::UnknownLevel(level.to_string())),
-        } 
-    }
-    pub fn register(&self) -> Result<()> {
+    pub fn register( worker_id: i64, data_center_id: i64, name: &str, password: &str, level: &str ) -> Result<()> {
         let config_path = USER_PATH.clone();
         let config_max = *USER_MAX;
 
@@ -65,14 +42,27 @@ impl User {
             write!(f, "{}", "[]")?;
         } 
 
-        let mut user = self.clone();
-        let name_len = user.name.chars().count();
         let password_regex = Regex::new(r"^[a-zA-Z0-9_-]{4,16}$")?;
+        if !password_regex.is_match(&password) {
+            return Err(UserError::PassWordFormatError(password.to_string()));
+        }
+        let name_len = name.chars().count();
         if name_len < 2 || name_len > 20 {
             return Err(UserError::NameLengthError(name_len));
-        } else if !password_regex.is_match(&user.password) {
-            return Err(UserError::PassWordFormatError(user.password));
         }
+        let uid = Snowflake::new(worker_id,data_center_id)?.generate()?;
+        let mut user = match level {
+            "0"
+            | "1"
+            | "2"
+            | "3" => User{
+                uid,
+                name: name.to_string(),
+                password: password.to_string(),
+                level: level.to_string(),
+            },
+            _ => return Err(UserError::UnknownLevel(level.to_string())),
+        };
 
         if let Ok(_) = Self::search(user.name.clone()) {
             return Err(UserError::UserNameExists(user.name));

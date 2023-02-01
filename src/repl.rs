@@ -127,8 +127,7 @@ impl LocalRepl {
                     if command.len() != 5 {
                         return Err(RorError::ParameterError("create user".to_string()));
                     }
-                    let user = User::new(0,0,command[2],command[3],command[4])?;
-                    user.register()?;
+                    User::register(0,0,command[2],command[3],command[4])?;
                     println!("Successfully create user '{0}'",command[2]);   
                 }
             }
