@@ -15,7 +15,13 @@ use super::user_error::{UserError,Result};
 use super::snowflake::Snowflake;
 use serde::{Serialize,Deserialize};
 use base64::{Engine as _, engine::general_purpose};
+use lazy_static::lazy_static;
 use toml;
+
+lazy_static! {
+    static ref USER_PATH: String = Config::get_config().path;
+    static ref USER_MAX: u16 = Config::get_config().user_max;
+}
 
 #[derive(Deserialize,Serialize,Clone)]
 pub struct User {
@@ -50,10 +56,12 @@ impl User {
         } 
     }
     pub fn register(&self) -> Result<()> {
-        let config = Config::get_config()?;
-        let path_slice = Path::new(&config.path);
+        let config_path = USER_PATH.clone();
+        let config_max = *USER_MAX;
+
+        let path_slice = Path::new(&config_path);
         if !path_slice.exists() {
-            let mut f = File::create(&config.path)?;
+            let mut f = File::create(&config_path)?;
             write!(f, "{}", "[]")?;
         } 
 
@@ -70,11 +78,10 @@ impl User {
             return Err(UserError::UserNameExists(user.name));
         }
         
-        if Self::count_users()? > config.user_max {
+        if Self::count_users()? > config_max {
             return Err(UserError::UserLimit);
         }
-        let config = Config::get_config()?;
-        let original = fs::read_to_string(&config.path)?;
+        let original = fs::read_to_string(&config_path)?;
         let mut data: Vec<User> = Vec::new();
         if original.len() != 0 {
             data = serde_json::from_str(&original)?;
@@ -82,7 +89,7 @@ impl User {
         user.encode();
         data.push(user);
         let json = serde_json::to_string(&data)?;
-        let mut file = File::create(&config.path)?;
+        let mut file = File::create(&config_path)?;
         write!(file, "{}", json)?;
         Ok(())
     }
@@ -100,8 +107,9 @@ impl User {
     }
     
     fn search(name: String) -> Result<User> {
-        let config = Config::get_config()?;
-        let str_data = fs::read_to_string(&config.path)?;
+        let config_path = USER_PATH.clone();
+        
+        let str_data = fs::read_to_string(&config_path)?;
         let data: Vec<User> = serde_json::from_str(&str_data)?;
         for u in data {
             if u.name == name {
@@ -113,8 +121,9 @@ impl User {
         Err(UserError::UserNotFound(name))
     }
     fn count_users() -> Result<u16> {
-        let config = Config::get_config()?;
-        let str_data = fs::read_to_string(&config.path)?;
+        let config_path = USER_PATH.clone();
+
+        let str_data = fs::read_to_string(&config_path)?;
         let data: Vec<User> = serde_json::from_str(&str_data)?;
         Ok(data.len().try_into()?)
     }
@@ -127,10 +136,11 @@ impl User {
         Ok(())
     }
     pub fn test_file() -> Result<()> {
-        let config = Config::get_config()?;
-        let path_slice = Path::new(&config.path);
+        let config_path = USER_PATH.clone();
+
+        let path_slice = Path::new(&config_path);
         if !path_slice.exists() {
-            let mut f = File::create(&config.path)?;
+            let mut f = File::create(&config_path)?;
             write!(f, "{}", "[]")?;
             return Ok(());
         }
@@ -151,14 +161,20 @@ impl Config {
             user_max: 50,
         }
     }
-    fn get_config() -> Result<Self> {
+    fn get_config() -> Self {
         let mut file = match File::open("config/users.toml") {
             Ok(f) => f,
-            Err(_) => return Ok(Self::default()),
+            Err(_) => return Self::default(),
         };
         let mut c = String::new();
-        file.read_to_string(&mut c)?;
-        let config: Config = toml::from_str(c.as_str())?;
-        Ok(config)
+        match file.read_to_string(&mut c) {
+            Ok(_) => (),
+            Err(_) => return Self::default(),
+        };
+        let config: Config = match toml::from_str(c.as_str()) {
+            Ok(c) => c,
+            Err(_) => return Self::default(),
+        };
+        config
     }
 }

@@ -11,6 +11,7 @@ const TIME_STAMP_SHIFT: u64 = SEQUENCE_LEN + WORKER_ID_LEN + DATA_CENTER_LEN;
 
 const DATA_CENTER_MAX: i64 = -1 ^ (-1 << DATA_CENTER_LEN);
 const WORKER_ID_MAX: i64 = -1 ^ (-1 << WORKER_ID_LEN);
+const SEQUENCE_MAX: i64 = -1 ^ (-1 << SEQUENCE_LEN);
 
 pub struct Snowflake {
     last_time_stamp: i64,
@@ -46,8 +47,9 @@ impl Snowflake {
             return Err(UserError::ClockBack);
         } else if time == self.last_time_stamp {
             self.sequence += 1;
-            if self.sequence == 0 {
-                time = next_millis(&self.last_time_stamp)?;
+            if self.sequence > SEQUENCE_MAX {
+                time = Self::next_millis(&self.last_time_stamp)?;
+                self.sequence = 0;
             }
         } else {
             self.sequence = 0;
