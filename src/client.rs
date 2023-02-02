@@ -7,7 +7,6 @@ use std::{
 };
 use super::{
     error::{RorError,Result},
-    store::kv::USIZE_SIZE,
     user::user_error::UserError,
     request::*,
 };

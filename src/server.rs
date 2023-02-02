@@ -16,7 +16,7 @@ use std::{
 use super::{
     error::{RorError,Result},
     store::{
-        kv::{DataStore,Value,USIZE_SIZE},
+        kv::{DataStore,Value},
         kv_error::KvError,
     },
     user::{
@@ -270,7 +270,7 @@ impl Client {
         match self.match_command(op) {
             Ok(OperateResult::Success(v)) => {
                 let msg = Message::new(OperateResult::Success(v));
-                let (buf,_) = msg.as_bytes()?;
+                let (buf,_) = msg.as_bytes()?; 
                 self.stream.write(&buf)?;
                 return Ok(());
             }
@@ -310,7 +310,7 @@ impl Client {
                 if self.user.level != "2" && self.user.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
-                match self.db.lock().unwrap().delete(&key) {
+                match self.db.try_lock()?.unwrap().delete(&key) {
                     Ok(_) => {
                         return Ok(OperateResult::Success(Value::Null));
                     }

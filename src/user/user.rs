@@ -33,15 +33,6 @@ pub struct User {
 
 impl User {
     pub fn register( worker_id: i64, data_center_id: i64, name: &str, password: &str, level: &str ) -> Result<()> {
-        let config_path = USER_PATH.clone();
-        let config_max = *USER_MAX;
-
-        let path_slice = Path::new(&config_path);
-        if !path_slice.exists() {
-            let mut f = File::create(&config_path)?;
-            write!(f, "{}", "[]")?;
-        } 
-
         let password_regex = Regex::new(r"^[a-zA-Z0-9_-]{4,16}$")?;
         if !password_regex.is_match(&password) {
             return Err(UserError::PassWordFormatError(password.to_string()));
@@ -55,7 +46,7 @@ impl User {
             "0"
             | "1"
             | "2"
-            | "3" => User{
+            | "3" => User {
                 uid,
                 name: name.to_string(),
                 password: password.to_string(),
@@ -64,17 +55,16 @@ impl User {
             _ => return Err(UserError::UnknownLevel(level.to_string())),
         };
 
-        if let Ok(_) = Self::search(user.name.clone()) {
-            return Err(UserError::UserNameExists(user.name));
-        }
-        
-        if Self::count_users()? > config_max {
+        let config_path = USER_PATH.clone();
+        let config_max = *USER_MAX;
+
+        let original = fs::read_to_string(&config_path)?;
+        let mut data: Vec<User> = serde_json::from_str(&original)?;
+        if data.len() > config_max.into() && config_max != 0 {
             return Err(UserError::UserLimit);
         }
-        let original = fs::read_to_string(&config_path)?;
-        let mut data: Vec<User> = Vec::new();
-        if original.len() != 0 {
-            data = serde_json::from_str(&original)?;
+        if let Ok(_) = Self::search(&data,user.name.clone()) {
+            return Err(UserError::UserNameExists(user.name));
         }
         user.encode();
         data.push(user);
@@ -84,9 +74,11 @@ impl User {
         Ok(())
     }
     pub fn login( name: String, password: String ) -> Result<Self> {
-        let user = match Self::search(name) {
+        let config_path = USER_PATH.clone();
+        let str_data = fs::read_to_string(&config_path)?;
+        let data: Vec<User> = serde_json::from_str(&str_data)?;
+        let user = match Self::search(&data,name) {
             Ok(user) => user,
-            Err(UserError::UserNotFound(name)) => return Err(UserError::UserNotFound(name)),
             Err(e) => return Err(e),
         };
         if password == user.password {
@@ -96,11 +88,7 @@ impl User {
         }
     }
     
-    fn search(name: String) -> Result<User> {
-        let config_path = USER_PATH.clone();
-        
-        let str_data = fs::read_to_string(&config_path)?;
-        let data: Vec<User> = serde_json::from_str(&str_data)?;
+    fn search(data: &Vec<User>, name: String) -> Result<Self> {
         for u in data {
             if u.name == name {
                 let mut user = u.clone();
@@ -109,13 +97,6 @@ impl User {
             }
         }
         Err(UserError::UserNotFound(name))
-    }
-    fn count_users() -> Result<u16> {
-        let config_path = USER_PATH.clone();
-
-        let str_data = fs::read_to_string(&config_path)?;
-        let data: Vec<User> = serde_json::from_str(&str_data)?;
-        Ok(data.len().try_into()?)
     }
     fn encode(&mut self) {
         self.password = general_purpose::STANDARD_NO_PAD.encode(self.password.clone());

@@ -1,10 +1,12 @@
 use super::{
-    store::kv::{Value,USIZE_SIZE},
+    store::kv::Value,
     error::Result,
 };
 use serde::{Serialize,Deserialize,de::DeserializeOwned};
 
-#[derive(Serialize, Deserialize, Debug)]
+pub const USIZE_SIZE: usize = std::mem::size_of::<usize>();
+
+#[derive(Serialize, Deserialize)]
 pub struct ConnectRequest {
     pub db_path: String,
     pub user_name: String,
@@ -50,7 +52,7 @@ pub struct Message<T> {
 }
 
 impl<T: Serialize + DeserializeOwned> Message<T>{
-    pub fn new(message: T) -> Message<T> {
+    pub fn new(message: T) -> Self {
         Self {
             message
         }
