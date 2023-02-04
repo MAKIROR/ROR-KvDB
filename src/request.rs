@@ -22,7 +22,7 @@ pub enum ConnectReply {
 #[derive(Serialize, Deserialize)]
 pub enum ConnectError {
     RequestError,
-    UserNotFound(String),
+    UserNotFound,
     PasswordError,
     OpenFileError,
     PathError,

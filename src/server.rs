@@ -49,7 +49,7 @@ impl Server {
         let config: Config = match Config::get_server() {
             Ok(config) => config,
             Err(e) => {
-                output_prompt(format!("Could not read configuration file: {0}", e).as_str());
+                output_prompt(format!("Could not read configuration file: {0}", e));
                 Config::default()
             }
         };
@@ -59,15 +59,21 @@ impl Server {
         };
     }
     pub fn start(&mut self) -> Result<()> {
-        let address = self.config.ip.clone() + ":" + &self.config.port.clone();
+        let address = format!("{0}:{1}", self.config.ip,&self.config.port);
         let listener = TcpListener::bind(address.clone())?;
-        output_prompt(format!("Server start: {}", address).as_str());
+        output_prompt(format!("Server start: {}", address));
 
         User::test_file()?;
 
         loop {
-            let (stream, adr) = listener.accept()?;
-            output_prompt(format!("New connection: {}", adr).as_str());
+            let (stream, adr) = match listener.accept() {
+                Ok(r) => r,
+                Err(e) => {
+                    output_prompt(format!("Unable to accept connection from a client: {0}",e));
+                    continue;
+                }
+            };
+            output_prompt(format!("New connection: {}", adr));
 
             match self.handle_connection(stream,adr) {
                 Ok(()) => continue,
@@ -75,7 +81,7 @@ impl Server {
                     format!("Client [{0}], failed to login. reason: {1}", 
                         adr, 
                         e,
-                    ).as_str()
+                    )
                 ),
             }
         }
@@ -90,26 +96,22 @@ impl Server {
         let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
             Ok(buf) => buf,
             Err(e) => {
-                Self::send_connect_error(stream, ConnectError::RequestError)?;
+                Self::send_error(stream, ConnectError::RequestError)?;
                 return Err(RorError::BincodeError(e));
             },
         };
         let user = match User::login(head.user_name,head.password) {
             Ok(u) => u,
             Err(UserError::UserNotFound(n)) => {
-                Self::send_connect_error(stream, ConnectError::UserNotFound(n.clone()))?;
+                Self::send_error(stream, ConnectError::UserNotFound)?;
                 return Err(RorError::UserError(UserError::UserNotFound(n)));
             },
             Err(UserError::WrongPassWord) => {
-                Self::send_connect_error(stream, ConnectError::PasswordError)?;
+                Self::send_error(stream, ConnectError::PasswordError)?;
                 return Err(RorError::UserError(UserError::WrongPassWord));
             },
-            Err(UserError::SerdeJsonError(e)) => {
-                Self::send_connect_error(stream, ConnectError::ServerError)?;
-                return Err(RorError::UserError(UserError::SerdeJsonError(e)));
-            }
             Err(e) => {
-                Self::send_connect_error(stream, ConnectError::ServerError)?;
+                Self::send_error(stream, ConnectError::ServerError)?;
                 return Err(RorError::UserError(e));
             }
         };
@@ -120,24 +122,24 @@ impl Server {
         let db_path = match db_path_buf.into_os_string().into_string() {
             Ok(s) => s,
             Err(_) => {
-                Self::send_connect_error(stream, ConnectError::PathError)?;
+                Self::send_error(stream, ConnectError::PathError)?;
                 return Err(RorError::PathError);
             },
         };
 
-        let opened_db;
         for (key, db) in &self.dbs {
             let exists = match is_same_file(&key, &db_path) {
                 Ok(b) => b,
                 Err(e) => {
-                    Self::send_connect_error(stream, ConnectError::ServerError)?;
+                    Self::send_error(stream, ConnectError::ServerError)?;
                     return Err(RorError::IOError(e));
                 },
             };
             if exists {
-                opened_db = Arc::clone(db);
-                if let Err(_) = Self::send_connect_reply(&mut stream){
+                let opened_db = Arc::clone(db);
+                if let Err(e) = Self::send_reply(&mut stream){
                     stream.shutdown(Shutdown::Both)?;
+                    return Err(e);
                 }
                 let client = Client {
                     stream,
@@ -153,15 +155,16 @@ impl Server {
                 return Ok(())
             }
         }
-        opened_db = match self.open_new_db(db_path.clone()) {
+        let opened_db = match self.open_new_db(db_path.clone()) {
             Ok(db) => db,
             Err(e) => {
-                Self::send_connect_error(stream, ConnectError::OpenFileError)?;
+                Self::send_error(stream, ConnectError::OpenFileError)?;
                 return Err(e);
             },
         };
-        if let Err(_) = Self::send_connect_reply(&mut stream) {
+        if let Err(e) = Self::send_reply(&mut stream) {
             stream.shutdown(Shutdown::Both)?;
+            return Err(e);
         }
         let client = Client {
             stream,
@@ -176,26 +179,17 @@ impl Server {
         });
         Ok(())
     }
-    fn send_connect_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
-        let err_bytes = bincode::serialize(&ConnectReply::Error(err))?;
-        let size = err_bytes.len();
-        let mut buf = vec![0; USIZE_SIZE + size];
-        buf[0..USIZE_SIZE].copy_from_slice(&size.to_be_bytes());
-        buf[USIZE_SIZE..].copy_from_slice(&err_bytes);
-        stream.write(buf.as_slice())?;
+    fn send_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
+        let (buf, _) = Message::new(err).as_bytes()?;
+        stream.write(&buf.as_slice())?;
         stream.shutdown(Shutdown::Both)?;
         Ok(())
     }
-    fn send_connect_reply(stream: &mut TcpStream) -> Result<()> {
-        let msg_bytes = bincode::serialize(&ConnectReply::Success)?;
-        let size = msg_bytes.len();
-        let mut buf = vec![0; USIZE_SIZE + size];
-        buf[0..USIZE_SIZE].copy_from_slice(&size.to_be_bytes());
-        buf[USIZE_SIZE..].copy_from_slice(&msg_bytes);
-        stream.write(buf.as_slice())?;
+    fn send_reply(stream: &mut TcpStream) -> Result<()> {
+        let (buf, _) = Message::new(ConnectReply::Success).as_bytes()?;
+        stream.write(&buf.as_slice())?;
         Ok(())
     }
-
     fn open_new_db(&mut self, path: String) -> Result<Arc<Mutex<DataStore>>> {
         let db = Arc::new(
             Mutex::new(
@@ -206,7 +200,6 @@ impl Server {
         self.dbs.insert( path.clone(), db );
         Ok(arc_clone_db)
     }
-
 }
 
 impl Client {
@@ -214,8 +207,8 @@ impl Client {
         let stream_clone = match self.stream.try_clone() {
             Ok(s) => s,
             Err(_) => {
-                output_prompt(format!("C[{0}] The reader cannot be created by the clone method, and the client is disconnected", self.address).as_str());
-                let _ = Server::send_connect_error(self.stream, ConnectError::ServerError);
+                output_prompt(format!("C[{0}] The reader cannot be created by the clone method, and the client is disconnected", self.address));
+                let _ = Server::send_error(self.stream, ConnectError::ServerError);
                 return;
             }
         };
@@ -224,22 +217,22 @@ impl Client {
             thread::sleep(time::Duration::from_secs(1 as u64));
 
             if self.timeout >= self.config.timeout {
-                output_prompt(format!("Client [{0}] activity timeout", self.address).as_str());
+                output_prompt(format!("Client [{0}] activity timeout", self.address));
                 let _ = self.stream.shutdown(Shutdown::Both);
                 break;
             }
             match &self.accept_request(&mut reader) {
                 Ok(()) => continue,
                 Err(RorError::Disconnect) => {
-                    output_prompt(format!("Client [{0}] disconnected", self.address).as_str());
+                    output_prompt(format!("Client [{0}] disconnected", self.address));
                     let _ = self.stream.shutdown(Shutdown::Both);
                     break;
                 },
-                Err(RorError::KvError(e)) => output_prompt(format!("An error occurred on client [{0}], buffer flushed and error message sent. {1}",self.address,e).as_str()),
+                Err(RorError::KvError(e)) => output_prompt(format!("An error occurred on client [{0}], buffer flushed and error message sent. {1}",self.address,e)),
                 Err(e) => {
-                    output_prompt(format!("An error occurred on client [{0}]. It may be fatal, the connection was forcibly terminated. {1}",self.address,e).as_str());
+                    output_prompt(format!("An error occurred on client [{0}]. It may be fatal, the connection was forcibly terminated. {1}",self.address,e));
                     if let Err(_) = self.stream.shutdown(Shutdown::Both) {
-                        output_prompt(format!("Client [{0}] unable to properly disconnect, thread has been forcibly closed",self.address).as_str());
+                        output_prompt(format!("Client [{0}] unable to properly disconnect, thread has been forcibly closed",self.address));
                     }
                     break;
                 }
@@ -310,7 +303,7 @@ impl Client {
                 if self.user.level != "2" && self.user.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
-                match self.db.try_lock()?.unwrap().delete(&key) {
+                match self.db.lock().unwrap().delete(&key) {
                     Ok(_) => {
                         return Ok(OperateResult::Success(Value::Null));
                     }
@@ -343,7 +336,7 @@ impl Client {
                 ) {
                     Ok(_) => return Ok(OperateResult::Success(Value::Null)),
                     Err(e) => {
-                        output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e).as_str());
+                        output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e));
                         return Ok(OperateResult::Failure);
                     }
                 }

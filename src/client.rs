@@ -23,20 +23,18 @@ impl Client {
         password: String, 
         db_path: String
     ) -> Result<Self> {
-        let address = ip.clone() + ":" + &port;
+        let address = format!("{0}:{1}", &ip, &port);
         let mut stream = match TcpStream::connect(&address) {
             Ok(s) => s,
-            Err(e) => {
-                println!("{}",e);
-                return Err(RorError::ConnectFailed(address));
-            },
+            Err(e) => return Err(RorError::ConnectFailed(e)),
         };
 
-        {
-            let body = Message::new(ConnectRequest{db_path,user_name,password});
-            let (buf,_) = body.as_bytes()?;
-            stream.write(&buf.as_slice())?;
-        }
+        let (buf,_) = Message::new(ConnectRequest {
+            db_path,
+            user_name: user_name.clone(),
+            password }
+        ).as_bytes()?;
+        stream.write(&buf.as_slice())?;
 
         let mut size_buffer = [0 as u8; USIZE_SIZE];
         stream.read_exact(&mut size_buffer)?;
@@ -47,7 +45,7 @@ impl Client {
         let result: ConnectReply = bincode::deserialize(&reply_buffer)?;
         match result {
             ConnectReply::Success => return Ok(Client {stream}),
-            ConnectReply::Error(ConnectError::UserNotFound(name)) => return Err(RorError::UserError(UserError::UserNotFound(name))),
+            ConnectReply::Error(ConnectError::UserNotFound) => return Err(RorError::UserError(UserError::UserNotFound(user_name))),
             ConnectReply::Error(ConnectError::PasswordError) => return Err(RorError::UserError(UserError::WrongPassWord)),
             ConnectReply::Error(ConnectError::OpenFileError) => return Err(RorError::OpenFileFailed),
             ConnectReply::Error(ConnectError::RequestError) => return Err(RorError::RequestError),

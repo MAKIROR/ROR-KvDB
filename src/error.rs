@@ -34,7 +34,7 @@ pub enum RorError {
     Disconnect,
 
     #[error("Unable to connect to server: {0}")]
-    ConnectFailed(String),
+    ConnectFailed(std::io::Error),
     #[error("Server cannot to open datafile")]
     OpenFileFailed,
     #[error("Server cannot parse the request correctly")]
@@ -47,8 +47,6 @@ pub enum RorError {
     ConnectionLost,
     #[error("Unable to parse data, probably it is incomplete")]
     IncompleteData,
-    #[error("Unknown error")]
-    Unknown,
 }
 
 pub type Result<T> = std::result::Result<T, RorError>;
