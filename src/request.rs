@@ -41,9 +41,10 @@ pub enum OperateRequest {
 
 #[derive(Serialize, Deserialize)]
 pub enum OperateResult {
-    Success(Value),
+    Found(Value),
+    Success,
     PermissionDenied,
-    KeyNotFound(String),
+    KeyNotFound,
     Failure,
 }
 

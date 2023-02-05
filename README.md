@@ -42,12 +42,6 @@ ip = "127.0.0.1"
 # port
 port = "11451"
 
-# Allow customization, the data type is i64, it will affect the result of "generating user uid according to configuration"
-worker_id = 0
-
-# Allow customization, the data type is i64, it will affect the result of "generating user uid according to configuration"
-data_center_id = 0
-
 # The directory for storing data files, all data files accessed by clients must be in this
 data_path = "./data/"
 

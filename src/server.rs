@@ -16,7 +16,7 @@ use std::{
 use super::{
     error::{RorError,Result},
     store::{
-        kv::{DataStore,Value},
+        kv::DataStore,
         kv_error::KvError,
     },
     user::{
@@ -29,15 +29,6 @@ use serde::{Serialize,Deserialize};
 use same_file::is_same_file;
 use chrono::prelude::Local;
 use bincode;
-
-pub struct Client {
-    stream: TcpStream,
-    db: Arc<Mutex<DataStore>>,
-    user: User,
-    address: SocketAddr,
-    timeout: u64,
-    config: Config,
-}
 
 pub struct Server {
     config: Config,
@@ -115,7 +106,6 @@ impl Server {
                 return Err(RorError::UserError(e));
             }
         };
-
         let mut db_path_buf = PathBuf::new();
         db_path_buf.push(&self.config.data_path);
         db_path_buf.push(&head.db_path);
@@ -126,6 +116,16 @@ impl Server {
                 return Err(RorError::PathError);
             },
         };
+
+        let stream_clone = match stream.try_clone() {
+            Ok(s) => s,
+            Err(e) => {
+                output_prompt(format!("[{0}] The reader cannot be created by the clone method, and the client is disconnected", &address));
+                Self::send_error(stream, ConnectError::ServerError)?;
+                return Err(RorError::IOError(e));
+            }
+        };
+        let reader = BufReader::new(stream_clone);
 
         for (key, db) in &self.dbs {
             let exists = match is_same_file(&key, &db_path) {
@@ -143,11 +143,12 @@ impl Server {
                 }
                 let client = Client {
                     stream,
+                    reader,
                     db: opened_db,
-                    user,
+                    level: user.level,
                     address,
                     timeout: 0,
-                    config: self.config.clone(),
+                    set_timeout: self.config.timeout.clone(),
                 };
                 thread::spawn(|| {
                     client.handle_client();
@@ -168,11 +169,12 @@ impl Server {
         }
         let client = Client {
             stream,
+            reader,
             db: opened_db,
-            user,
+            level: user.level,
             address,
             timeout: 0,
-            config: self.config.clone(),
+            set_timeout: self.config.timeout.clone(),
         };
         thread::spawn(|| {
             client.handle_client();
@@ -202,26 +204,27 @@ impl Server {
     }
 }
 
+pub struct Client {
+    stream: TcpStream,
+    reader: BufReader<TcpStream>,
+    db: Arc<Mutex<DataStore>>,
+    level: String,
+    address: SocketAddr,
+    timeout: u64,
+    set_timeout: u64,
+}
+
 impl Client {
     fn handle_client(mut self) {
-        let stream_clone = match self.stream.try_clone() {
-            Ok(s) => s,
-            Err(_) => {
-                output_prompt(format!("C[{0}] The reader cannot be created by the clone method, and the client is disconnected", self.address));
-                let _ = Server::send_error(self.stream, ConnectError::ServerError);
-                return;
-            }
-        };
-        let mut reader = BufReader::new(stream_clone);
         loop {
             thread::sleep(time::Duration::from_secs(1 as u64));
 
-            if self.timeout >= self.config.timeout {
+            if self.timeout >= self.set_timeout {
                 output_prompt(format!("Client [{0}] activity timeout", self.address));
                 let _ = self.stream.shutdown(Shutdown::Both);
                 break;
             }
-            match &self.accept_request(&mut reader) {
+            match &self.accept_request() {
                 Ok(()) => continue,
                 Err(RorError::Disconnect) => {
                     output_prompt(format!("Client [{0}] disconnected", self.address));
@@ -230,18 +233,18 @@ impl Client {
                 },
                 Err(RorError::KvError(e)) => output_prompt(format!("An error occurred on client [{0}], buffer flushed and error message sent. {1}",self.address,e)),
                 Err(e) => {
-                    output_prompt(format!("An error occurred on client [{0}]. It may be fatal, the connection was forcibly terminated. {1}",self.address,e));
                     if let Err(_) = self.stream.shutdown(Shutdown::Both) {
                         output_prompt(format!("Client [{0}] unable to properly disconnect, thread has been forcibly closed",self.address));
                     }
+                    output_prompt(format!("An error occurred on client [{0}]. It may be fatal, the connection was forcibly terminated. {1}",self.address,e));
                     break;
                 }
             }
         }
     }
-    fn accept_request(&mut self, reader: &mut BufReader<TcpStream>) -> Result<()> {
+    fn accept_request(&mut self) -> Result<()> {
         let mut size_buffer = [0 as u8; USIZE_SIZE];
-        match reader.read_exact(&mut size_buffer) {
+        match self.reader.read_exact(&mut size_buffer) {
             Ok(_) => self.timeout = 0,
             Err(e) => {
                 if e.kind() == ErrorKind::UnexpectedEof {
@@ -253,36 +256,27 @@ impl Client {
         }
         let body_size = usize::from_be_bytes(size_buffer);
         let mut body_buffer = vec![0; body_size];
-        match reader.read(&mut body_buffer) {
+        match self.reader.read(&mut body_buffer) {
             Ok(_) => (),
             Err(_) => return Ok(()),
         }
-        let op: OperateRequest = bincode::deserialize(&body_buffer)?;
-        self.stream.flush()?;
-
-        match self.match_command(op) {
-            Ok(OperateResult::Success(v)) => {
-                let msg = Message::new(OperateResult::Success(v));
+        let op: OperateRequest = match bincode::deserialize(&body_buffer) {
+            Ok(r) => r,
+            Err(_) => {
+                let msg = Message::new(OperateResult::Failure);
                 let (buf,_) = msg.as_bytes()?; 
                 self.stream.write(&buf)?;
+                self.stream.flush()?;
                 return Ok(());
             }
-            Ok(OperateResult::PermissionDenied) => {
-                let msg = Message::new(OperateResult::PermissionDenied);
-                let (buf,_) = msg.as_bytes()?;
+        };
+
+        match self.match_command(op) {
+            Ok(r) => {
+                let msg = Message::new(r);
+                let (buf,_) = msg.as_bytes()?; 
                 self.stream.write(&buf)?;
-                return Ok(());
-            }
-            Ok(OperateResult::KeyNotFound(s)) => {
-                let msg = Message::new(OperateResult::KeyNotFound(s));
-                let (buf,_) = msg.as_bytes()?;
-                self.stream.write(&buf)?;
-                return Ok(());
-            }
-            Ok(OperateResult::Failure) => {
-                let msg = Message::new(OperateResult::Failure);
-                let (buf,_) = msg.as_bytes()?;
-                self.stream.write(&buf)?;
+                self.stream.flush()?;
                 return Ok(());
             }
             Err(e) => return Err(e),
@@ -293,48 +287,46 @@ impl Client {
             OperateRequest::Get { key } => {
                 match self.db.lock().unwrap().get(&key) {
                     Ok(v) => {
-                        return Ok(OperateResult::Success(v));
+                        return Ok(OperateResult::Found(v));
                     }
-                    Err(KvError::KeyNotFound(s)) => return Ok(OperateResult::KeyNotFound(s)),
+                    Err(KvError::KeyNotFound(_)) => return Ok(OperateResult::KeyNotFound),
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
             OperateRequest::Delete { key } => {
-                if self.user.level != "2" && self.user.level != "3" {
+                if self.level != "2" && self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
                 match self.db.lock().unwrap().delete(&key) {
                     Ok(_) => {
-                        return Ok(OperateResult::Success(Value::Null));
+                        return Ok(OperateResult::Success);
                     }
-                    Err(KvError::KeyNotFound(s)) => return Ok(OperateResult::KeyNotFound(s)),
+                    Err(KvError::KeyNotFound(_)) => return Ok(OperateResult::KeyNotFound),
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
             OperateRequest::Add { key, value } => {
-                if self.user.level != "1" && self.user.level != "2" && self.user.level != "3" {
+                if self.level != "1" && self.level != "2" && self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
                 match self.db.lock().unwrap().add(&key,value) {
                     Ok(_) => {
-                        return Ok(OperateResult::Success(Value::Null));
+                        return Ok(OperateResult::Success);
                     }
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
             OperateRequest::CreateUser { username, password, level } => {
-                if self.user.level != "3" {
+                if self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
 
                 match User::register(                    
-                    self.config.worker_id.clone(),
-                    self.config.data_center_id.clone(),
                     &username.as_str(),
                     &password.as_str(),
                     &level.as_str()
                 ) {
-                    Ok(_) => return Ok(OperateResult::Success(Value::Null)),
+                    Ok(_) => return Ok(OperateResult::Success),
                     Err(e) => {
                         output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e));
                         return Ok(OperateResult::Failure);
@@ -342,18 +334,17 @@ impl Client {
                 }
             }
             OperateRequest::Compact => {
-                if self.user.level != "1" && self.user.level != "2" && self.user.level != "3" {
+                if self.level != "1" && self.level != "2" && self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
                 match self.db.lock().unwrap().compact() {
                     Ok(_) => {
-                        return Ok(OperateResult::Success(Value::Null));
+                        return Ok(OperateResult::Success);
                     }
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
             OperateRequest::Quit => {
-                self.stream.shutdown(Shutdown::Both)?;
                 return Err(RorError::Disconnect);
             },
         }
@@ -365,8 +356,6 @@ struct Config {
     name: String,
     ip: String,
     port: String,
-    worker_id: i64,
-    data_center_id: i64,
     data_path: String,
     timeout: u64,
 }
@@ -377,8 +366,6 @@ impl Config {
             name: "Default server".to_string(),
             ip: "127.0.0.1".to_string(),
             port: "11451".to_string(),
-            worker_id: 0,
-            data_center_id: 0,
             data_path: "./data/".to_string(),
             timeout: 300,
         }

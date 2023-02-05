@@ -1,7 +1,5 @@
 name = "Default server"
 ip = "127.0.0.1"
 port = "11451"
-worker_id = 0
-data_center_id = 0
 data_path = "./data/"
 timeout = 300

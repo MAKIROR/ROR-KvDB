@@ -9,15 +9,29 @@ use super::{
     user::user::User,
 };
 use chrono::prelude::Local;
+use dialoguer::Input;
+use termion::event::Key;
+use termion::input::TermRead;
 
 pub struct LocalRepl {
-    pub database: DataStore,
+    database: DataStore,
+    history: Vec<String>
 }
 
 impl LocalRepl {
     pub fn open(path: &str) -> Result<Self> {
         let database = DataStore::open(path)?;
-        Ok(Self{database})
+        Ok(Self {
+            database,
+            history: Vec::new(),
+        })
+    }
+    pub fn run(&mut self) {
+        loop {
+            if let Err(e) = self.match_command() {
+                println!("{}",e);
+            }
+        }
     }
     pub fn match_command(&mut self) -> Result<()> {
         print!("{0} > ",self.database.path);
@@ -27,7 +41,6 @@ impl LocalRepl {
         if input == "\n" {
             return Ok(())
         }
-        input = input.trim().to_string();
         let command :Vec<&str> = input.split(" ").collect();  
         match command[0] {
             "open" => {
@@ -127,7 +140,7 @@ impl LocalRepl {
                     if command.len() != 5 {
                         return Err(RorError::ParameterError("create user".to_string()));
                     }
-                    User::register(0,0,command[2],command[3],command[4])?;
+                    User::register(command[2],command[3],command[4])?;
                     println!("Successfully create user '{0}'",command[2]);   
                 }
             }
@@ -135,13 +148,6 @@ impl LocalRepl {
             _ => return Err(RorError::UnknownCommand(command[0].to_string())),
         }
         Ok(())
-    }
-    pub fn run(&mut self) {
-        loop {
-            if let Err(e) = self.match_command() {
-                println!("{}",e);
-            }
-        }
     }
 }
 
@@ -290,19 +296,20 @@ impl RemoteRepl {
                 }
                 let op = OperateRequest::Get {key: command[1].to_string()};
                 let value = match self.client.operate(op)? {
-                    OperateResult::Success(v) => v,
+                    OperateResult::Found(v) => v,
                     OperateResult::PermissionDenied => {
                         println!("Permission Denied");
                         return Ok(());
                     }
-                    OperateResult::KeyNotFound(k) => {
-                        println!("Key not found: {0}",k);
+                    OperateResult::KeyNotFound => {
+                        println!("Key not found: {0}", command[1]);
                         return Ok(());
                     }
                     OperateResult::Failure => {
                         println!("The request failed, possibly due to a server error");
                         return Ok(());
                     }
+                    OperateResult::Success => return Ok(()),
                 };
 
                 let str_value = match value {
@@ -347,9 +354,10 @@ impl RemoteRepl {
     }
     fn match_op_reply(result: OperateResult) {
         match result {
-            OperateResult::Success(_) => println!("Successfully completed the request"),
+            OperateResult::Found(_) => (),
+            OperateResult::Success => println!("Successfully completed the request"),
             OperateResult::PermissionDenied => println!("Permission Denied"),
-            OperateResult::KeyNotFound(k) => println!("Key not found: {0}",k),
+            OperateResult::KeyNotFound => println!("Key not found"),
             OperateResult::Failure => println!("The request failed, possibly due to a server error"),
         }
     }

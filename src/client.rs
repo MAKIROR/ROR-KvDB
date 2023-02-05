@@ -57,21 +57,20 @@ impl Client {
         let body = Message::new(request);
         let (buf,_) = body.as_bytes()?;
 
-        match self.stream.write(&buf) {
-            Ok(_) => {
-                let mut size_buffer = [0 as u8; USIZE_SIZE];
-                self.stream.read_exact(&mut size_buffer)?;
-                let reply_size = usize::from_be_bytes(size_buffer);
-                let mut reply_buffer = vec![0; reply_size];
-                self.stream.read_exact(&mut reply_buffer)?;
-
-                let reply: OperateResult = match bincode::deserialize(&reply_buffer) {
-                    Ok(r) => r,
-                    Err(_) => return Err(RorError::IncompleteData),
-                };
-                return Ok(reply);
-            },
-            Err(_) => return Err(RorError::ConnectionLost),
+        if let Err(_) = self.stream.write(&buf) {
+            return Err(RorError::ConnectionLost);
         }
+
+        let mut size_buffer = [0 as u8; USIZE_SIZE];
+        self.stream.read_exact(&mut size_buffer)?;
+        let reply_size = usize::from_be_bytes(size_buffer);
+        let mut reply_buffer = vec![0; reply_size];
+        self.stream.read_exact(&mut reply_buffer)?;
+
+        let reply: OperateResult = match bincode::deserialize(&reply_buffer) {
+            Ok(r) => r,
+            Err(_) => return Err(RorError::IncompleteData),
+        };
+        return Ok(reply);
     }
 }

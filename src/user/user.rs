@@ -12,7 +12,6 @@ use std::{
 };
 use regex::Regex;
 use super::user_error::{UserError,Result};
-use super::snowflake::Snowflake;
 use serde::{Serialize,Deserialize};
 use base64::{Engine as _, engine::general_purpose};
 use lazy_static::lazy_static;
@@ -25,14 +24,13 @@ lazy_static! {
 
 #[derive(Deserialize,Serialize,Clone)]
 pub struct User {
-    uid: String,
     name: String,
     password: String,
     pub level: String,
 }
 
 impl User {
-    pub fn register( worker_id: i64, data_center_id: i64, name: &str, password: &str, level: &str ) -> Result<()> {
+    pub fn register( name: &str, password: &str, level: &str ) -> Result<()> {
         let password_regex = Regex::new(r"^[a-zA-Z0-9_-]{4,16}$")?;
         if !password_regex.is_match(&password) {
             return Err(UserError::PassWordFormatError(password.to_string()));
@@ -41,13 +39,11 @@ impl User {
         if name_len < 2 || name_len > 20 {
             return Err(UserError::NameLengthError(name_len));
         }
-        let uid = Snowflake::new(worker_id,data_center_id)?.generate()?;
         let mut user = match level {
             "0"
             | "1"
             | "2"
             | "3" => User {
-                uid,
                 name: name.to_string(),
                 password: password.to_string(),
                 level: level.to_string(),

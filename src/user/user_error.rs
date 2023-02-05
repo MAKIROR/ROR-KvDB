@@ -25,12 +25,6 @@ pub enum UserError {
     Base64Error(#[from] base64::DecodeError),
     #[error("{0}")]
     DecodeUtf8Error(#[from] Utf8Error),
-    #[error("The timestamp is abnsormal, maybe the clock is back")]
-    ClockBack,
-    #[error("Unqualified length of data machine id")]
-    WorkerIdLengthError,
-    #[error("Unqualified length of data center id")]
-    DataCenterLengthError,
     #[error("User '{0}' not found")]
     UserNotFound(String),
     #[error("Wrong user password")]
