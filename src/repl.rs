@@ -9,13 +9,9 @@ use super::{
     user::user::User,
 };
 use chrono::prelude::Local;
-use dialoguer::Input;
-use termion::event::Key;
-use termion::input::TermRead;
 
 pub struct LocalRepl {
     database: DataStore,
-    history: Vec<String>
 }
 
 impl LocalRepl {
@@ -23,7 +19,6 @@ impl LocalRepl {
         let database = DataStore::open(path)?;
         Ok(Self {
             database,
-            history: Vec::new(),
         })
     }
     pub fn run(&mut self) {

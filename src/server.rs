@@ -29,6 +29,7 @@ use serde::{Serialize,Deserialize};
 use same_file::is_same_file;
 use chrono::prelude::Local;
 use bincode;
+use colored::Colorize;
 
 pub struct Server {
     config: Config,
@@ -381,5 +382,5 @@ impl Config {
 
 fn output_prompt<T: std::fmt::Display>(content: T) {
     let time = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-    println!("[{0}] {1}",time,content);
+    println!("[{0}] {1}",time.yellow(),content);
 }
