@@ -2,8 +2,8 @@
 A simple Key–Value Database.   
 
 ## Tutorial Blog (Chinese Only) :    
-<a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust.md" target="_blank">Part 1: Basic Storage Functions</a></br>
-Part 2: User System and Network Services (writing)
+<a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part1.md" target="_blank">Part 1: Basic Storage Functions</a></br>
+<a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part2-3.md" target="_blank">User System and Network Services</a></br>
 
 ## Local mode
 Enter REPL(Read-Eval-Print Loop) mode and perform database operations locally.
