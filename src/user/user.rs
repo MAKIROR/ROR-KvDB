@@ -115,14 +115,15 @@ impl User {
     }
 }
 
-#[derive(Deserialize)]
-struct Config {
+#[derive(Deserialize,Serialize)]
+
+pub struct Config {
     path: String,
     user_max: u16,
 }
 
 impl Config {
-    fn default() -> Self {
+    pub fn default() -> Self {
         Config {
             path: "users.json".to_string(),
             user_max: 50,

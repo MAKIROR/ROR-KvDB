@@ -35,6 +35,7 @@ pub enum OperateRequest {
     Add { key: String, value: Value },
     Delete { key: String },
     CreateUser { username: String, password: String, level: String },
+    GetType { key: String },
     Compact,
     Quit,
 }
@@ -42,6 +43,7 @@ pub enum OperateRequest {
 #[derive(Serialize, Deserialize)]
 pub enum OperateResult {
     Found(Value),
+    Type(String),
     Success,
     PermissionDenied,
     KeyNotFound,

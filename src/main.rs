@@ -20,18 +20,25 @@ fn main() {
         .subcommand(
             Command::new("server")
             .about("Start the database server")
+            .subcommand(
+                Command::new("init")
+                .about("Initialize server")
+            )
         )
         .subcommand(
             Command::new("connect")
             .about("Connect to remote database")
-            .arg(arg!(-i --ip <VALUE> "IP"))
+            .arg(arg!(-i --ip "IP"))
             .arg(arg!(-p --port <VALUE> "Port"))
             .arg(arg!(-u --user <VALUE> "User Info (username@password)"))
             .arg(arg!(-f --file <VALUE> "Datafile"))
         )
     .get_matches();
     match matches.subcommand() {
-        Some(("server",_)) => {
+        Some(("server", m)) => {
+            if let Some(("init",_)) = m.subcommand() {
+                Server::init().unwrap();
+            }
             let mut s = Server::new();
             s.start().unwrap();
         }

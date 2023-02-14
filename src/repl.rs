@@ -36,7 +36,7 @@ impl LocalRepl {
         if input == "\n" {
             return Ok(())
         }
-        let command :Vec<&str> = input.split(" ").collect();  
+        let command :Vec<&str> = input.trim().split(" ").collect();  
         match command[0] {
             "open" => {
                 if command.len() != 2 {
@@ -44,7 +44,7 @@ impl LocalRepl {
                 }
                 let db = DataStore::open(command[1])?;
                 self.database = db;
-                println!("successfully opened '{}' ", command[1]);
+                println!("successfully opened '{}' \n", command[1]);
             }
             "add" => {
                 if command.len() == 4 {
@@ -91,21 +91,21 @@ impl LocalRepl {
                 } else {
                     return Err(RorError::ParameterError("add".to_string()));
                 }
-                println!("Successfully added data {0} : {1}",command[1],command[2]);
+                println!("Successfully added data {0} : {1}\n",command[1],command[2]);
             }
             "delete" => {
                 if command.len() != 2 {
                     return Err(RorError::ParameterError("delete".to_string()));
                 }
                 self.database.delete(command[1])?;
-                println!("Successfully delete data {}",command[1]);
+                println!("Successfully delete data {}\n",command[1]);
             }, 
             "compact" => {
                 if command.len() != 1 {
                     return Err(RorError::ParameterError("compact".to_string()));
                 }
                 self.database.compact()?;
-                println!("Datafile {} has been compacted", self.database.path);
+                println!("Datafile {} has been compacted\n", self.database.path);
             },
             "get" => {
                 if command.len() != 2 {
@@ -128,15 +128,33 @@ impl LocalRepl {
                         string
                     }
                 };
-                println!("{}",str_value);
-            }
+                println!("{}\n",str_value);
+            },
+            "typeof"  => {
+                if command.len() != 2 {
+                    return Err(RorError::ParameterError("typeof".to_string()));
+                }
+                let value: Value = self.database.get(command[1])?;
+                println!("{}\n",DataStore::type_of(value));
+            },
+            "list"  => {
+                if command[1] == "values" {
+                    let data = self.database.get_all_value()?;
+                    println!("{:?}\n",data);
+                } else if command[1] == "entries" {
+                    let data = self.database.get_all_entry()?;
+                    println!("{:?}\n",data);
+                } else {
+                    println!("Unknown\n");
+                }
+            },
             "user" => {
                 if command[1] == "create" {
                     if command.len() != 5 {
                         return Err(RorError::ParameterError("create user".to_string()));
                     }
                     User::register(command[2],command[3],command[4])?;
-                    println!("Successfully create user '{0}'",command[2]);   
+                    println!("Successfully create user '{0}\n'",command[2]);   
                 }
             }
             "quit" => quit_program(),
@@ -293,18 +311,18 @@ impl RemoteRepl {
                 let value = match self.client.operate(op)? {
                     OperateResult::Found(v) => v,
                     OperateResult::PermissionDenied => {
-                        println!("Permission Denied");
+                        println!("Permission Denied\n");
                         return Ok(());
                     }
                     OperateResult::KeyNotFound => {
-                        println!("Key not found: {0}", command[1]);
+                        println!("Key not found: {0}\n", command[1]);
                         return Ok(());
                     }
                     OperateResult::Failure => {
-                        println!("The request failed, possibly due to a server error");
+                        println!("The request failed, possibly due to a server error\n");
                         return Ok(());
                     }
-                    OperateResult::Success => return Ok(()),
+                    _ => return Ok(()),
                 };
 
                 let str_value = match value {
@@ -323,8 +341,16 @@ impl RemoteRepl {
                         string
                     }
                 };
-                println!("{}",str_value);
-            }
+                println!("{}\n",str_value);
+            },
+            "typeof"  => {
+                if command.len() != 2 {
+                    return Err(RorError::ParameterError("get".to_string()));
+                }
+                let op = OperateRequest::GetType {key: command[1].to_string()};
+                let result = self.client.operate(op)?;
+                Self::match_op_reply(result);
+            },
             "user" => {
                 if command[1] == "create" {
                     if command.len() != 5 {
@@ -350,10 +376,11 @@ impl RemoteRepl {
     fn match_op_reply(result: OperateResult) {
         match result {
             OperateResult::Found(_) => (),
-            OperateResult::Success => println!("Successfully completed the request"),
-            OperateResult::PermissionDenied => println!("Permission Denied"),
-            OperateResult::KeyNotFound => println!("Key not found"),
-            OperateResult::Failure => println!("The request failed, possibly due to a server error"),
+            OperateResult::Type(t) => println!("{}\n", t),
+            OperateResult::Success => println!("Successfully completed the request\n"),
+            OperateResult::PermissionDenied => println!("Permission Denied\n"),
+            OperateResult::KeyNotFound => println!("Key not found\n"),
+            OperateResult::Failure => println!("The request failed, possibly due to a server error\n"),
         }
     }
     fn reconnect(&mut self) -> Result<()> {

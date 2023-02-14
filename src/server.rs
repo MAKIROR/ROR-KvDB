@@ -5,6 +5,7 @@ use std::{
         BufReader,
         ErrorKind,
     },
+    fs,
     net::{TcpListener, TcpStream, Shutdown, SocketAddr},
     fs::File,
     collections::HashMap,
@@ -20,7 +21,7 @@ use super::{
         kv_error::KvError,
     },
     user::{
-        user::User,
+        user::{self,User},
         user_error::UserError,
     },
     request::*,
@@ -49,6 +50,19 @@ impl Server {
             config,
             dbs: HashMap::new(),
         };
+    }
+    pub fn init() -> Result<()> {
+        fs::create_dir("config")?;
+        let server_config = toml::to_string(&Config::default())?;
+        let mut file = File::create("config/server.toml")?;
+        write!(file, "{}", server_config)?;
+        let user_config = toml::to_string(&user::Config::default())?;
+        let mut file = File::create("config/user.toml")?;
+        write!(file, "{}", user_config)?;
+        User::test_file()?;
+        User::register("root","123456","3")?;
+
+        Ok(())
     }
     pub fn start(&mut self) -> Result<()> {
         let address = format!("{0}:{1}", self.config.ip,&self.config.port);
@@ -334,6 +348,15 @@ impl Client {
                     }
                 }
             }
+            OperateRequest::GetType { key } => {
+                match self.db.lock().unwrap().get(&key) {
+                    Ok(v) => {
+                        return Ok(OperateResult::Type(DataStore::type_of(v)));
+                    }
+                    Err(KvError::KeyNotFound(_)) => return Ok(OperateResult::KeyNotFound),
+                    Err(e) => return Err(RorError::KvError(e)),
+                }
+            }
             OperateRequest::Compact => {
                 if self.level != "1" && self.level != "2" && self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
@@ -344,7 +367,7 @@ impl Client {
                     }
                     Err(e) => return Err(RorError::KvError(e)),
                 }
-            }
+            },
             OperateRequest::Quit => {
                 return Err(RorError::Disconnect);
             },

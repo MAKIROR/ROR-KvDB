@@ -14,9 +14,9 @@ pub enum RorError {
     TomlSeError(#[from] toml::ser::Error),
     #[error("{0}")]
     BincodeError(#[from] Box<bincode::ErrorKind>),
-    #[error("Error from storage module :{0}")]
+    #[error("{0}")]
     KvError(#[from] KvError),
-    #[error("Error from user module :{0}")]
+    #[error("{0}")]
     UserError(#[from] UserError),
 
     #[error("Datafile Not found :{0}")]

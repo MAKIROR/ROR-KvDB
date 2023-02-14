@@ -139,6 +139,33 @@ impl DataStore {
             Err(e) => return Err(e),
         }
     }
+    pub fn get_all_value(&mut self) -> Result<Vec<Value>> {
+        let mut data: Vec<Value> = Vec::new();
+        let mut offset_vec: Vec<u64> = Vec::new();
+        for (_, offset) in &self.index {
+            offset_vec.push(*offset);
+        }
+        for offset in offset_vec {
+            let value = match self.read_with_offset(offset.clone()) {
+                Ok(entry) => entry.value,
+                Err(e) => return Err(e),
+            };
+            data.push(value);
+        }
+        return Ok(data);
+    }
+    pub fn get_all_entry(&mut self) -> Result<Vec<Entry>> {
+        let mut data: Vec<Entry> = Vec::new();
+        let mut offset_vec: Vec<u64> = Vec::new();
+        for (_, offset) in &self.index {
+            offset_vec.push(*offset);
+        }
+        for offset in offset_vec {
+            let entry = self.read_with_offset(offset.clone())?;
+            data.push(entry);
+        }
+        return Ok(data);
+    }
     pub fn add(&mut self, key: &str, value: Value) -> Result<()> {
         let value_size: usize = bincode::serialize(&value)?.len();
         let string_key = key.to_string();
@@ -199,6 +226,18 @@ impl DataStore {
         self.uncompacted = 0;
         self.index = new_hashmap;
         Ok(())
+    }
+    pub fn type_of(value: Value) -> String {
+        return match value {
+            Value::Null => "Null".to_string(),
+            Value::Bool(_) => "Bool".to_string(),
+            Value::Int32(_) => "Int".to_string(),
+            Value::Int64(_) => "Long".to_string(),
+            Value::Float32(_) => "Float".to_string(),
+            Value::Float64(_) => "Double".to_string(),
+            Value::String(_) => "String".to_string(),
+            Value::Char(_) => "Chat".to_string(),
+        }
     }
     fn load_hashmap(&mut self) -> Result<(HashMap<String, u64>, u64)> {
         let mut offset = 0;
