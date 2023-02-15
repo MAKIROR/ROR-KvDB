@@ -20,6 +20,8 @@ open [data file path]
 add [key] [value] [optional: type of data]
 delete [key]
 get [key]
+list [values/entries]
+typeof [key]
 compact
 user create [username] [password] [level]
 quit
@@ -52,6 +54,11 @@ timeout = 300
 
 <br>
 
+Initialize a server program through this command (generate configuration file):
+```
+rdb server init
+```
+
 ## Client mode
 Connect to a remote server and start the REPL.
 ### Connect
@@ -69,6 +76,7 @@ When you start connect without parameters, it will ask you to enter these after 
 The user's level determines which commands can be used.
 ```
 get [key] (all)
+typeof [key] (all)
 add [key] [value] [optional: type of data] (level 2-4)
 delete [key] (level 3-4)
 compact (level 2-4)
@@ -147,6 +155,21 @@ Successfully added data of type String 'name' : 'makiror'
 test.data > get name
 makiror
 ```
+
+### typeof
+```
+typeof [key]
+```
+Print the type of Key-Value data.
+
+### list
+```
+list [values/entries]
+```
+Print all values/entries in data file.    
+This command is only allowed in local mode.    
+It just gets all the data and returns it. This operation will consume more memory when the amount of data is large, so I don't recommend using this command.
+
 
 ### Compact
 ```
