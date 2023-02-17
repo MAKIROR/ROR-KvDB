@@ -5,6 +5,12 @@ A simple Key–Value Database.
 <a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part1.md" target="_blank">Part 1: Basic Storage Functions</a></br>
 <a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part2-3.md" target="_blank">User System and Network Services</a></br>
 
+## Library
+Library for ROR Key-Value Database.(Rust)</br>
+<a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part2-3.md" target="_blank">https://github.com/MAKIROR/ROR-KvDB-Lib</a></br>
+
+Library for developers, including data storage and remoting functions.</br>
+
 ## Local mode
 Enter REPL(Read-Eval-Print Loop) mode and perform database operations locally.
 
