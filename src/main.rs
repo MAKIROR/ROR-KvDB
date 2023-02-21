@@ -7,11 +7,10 @@ use clap::{arg, Command};
 use rdb::{Server,LocalRepl,RemoteRepl};
 
 fn main() {
-    
-    let matches = Command::new("MyApp")
+    let matches = Command::new("ROR Key-Value Database")
         .version("0.1.0")
         .author("MAKIROR")
-        .about("A Meo developer")
+        .about("ROR Key-Value Database")
         .subcommand(
             Command::new("local")
             .about("Start the local database")
@@ -28,15 +27,15 @@ fn main() {
         .subcommand(
             Command::new("connect")
             .about("Connect to remote database")
-            .arg(arg!(-i --ip "IP"))
+            .arg(arg!(-i --ip <VALUE> "IP"))
             .arg(arg!(-p --port <VALUE> "Port"))
             .arg(arg!(-u --user <VALUE> "User Info (username@password)"))
             .arg(arg!(-f --file <VALUE> "Datafile"))
         )
     .get_matches();
     match matches.subcommand() {
-        Some(("server", m)) => {
-            if let Some(("init",_)) = m.subcommand() {
+        Some(("server", sub_m)) => {
+            if let Some(("init",_)) = sub_m.subcommand() {
                 Server::init().unwrap();
             }
             let mut s = Server::new();
