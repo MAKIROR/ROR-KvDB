@@ -236,7 +236,7 @@ impl DataStore {
             Value::Float32(_) => "Float".to_string(),
             Value::Float64(_) => "Double".to_string(),
             Value::String(_) => "String".to_string(),
-            Value::Char(_) => "Chat".to_string(),
+            Value::Char(_) => "Char".to_string(),
         }
     }
     fn load_hashmap(&mut self) -> Result<(HashMap<String, u64>, u64)> {
