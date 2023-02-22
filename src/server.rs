@@ -10,7 +10,7 @@ use std::{
     fs::File,
     collections::HashMap,
     sync::{Arc,Mutex},
-    thread,
+    thread::{self, JoinHandle},
     time,
     path::PathBuf,
 };
@@ -25,6 +25,7 @@ use super::{
         user_error::UserError,
     },
     request::*,
+    repl::RemoteRepl,
 };
 use serde::{Serialize,Deserialize};
 use same_file::is_same_file;
@@ -34,7 +35,8 @@ use colored::Colorize;
 
 pub struct Server {
     config: Config,
-    dbs: HashMap<String,Arc<Mutex<DataStore>>>,
+    dbs: HashMap<String, Arc<Mutex<DataStore>>>,
+    clients: HashMap<String, (String, JoinHandle<()>)>,
 }
 
 impl Server {
@@ -49,6 +51,7 @@ impl Server {
         return Self {
             config,
             dbs: HashMap::new(),
+            clients: HashMap::new(),
         };
     }
     pub fn init() -> Result<()> {
@@ -59,6 +62,9 @@ impl Server {
         let user_config = toml::to_string(&user::Config::default())?;
         let mut file = File::create("config/user.toml")?;
         write!(file, "{}", user_config)?;
+        fs::create_dir("data")?;
+        File::create("data/default.data")?;
+
         User::test_file()?;
         User::register("root","123456","3")?;
 
@@ -67,11 +73,37 @@ impl Server {
     pub fn start(&mut self) -> Result<()> {
         let address = format!("{0}:{1}", self.config.ip,&self.config.port);
         let listener = TcpListener::bind(address.clone())?;
-        output_prompt(format!("Server start: {}", address));
-
         User::test_file()?;
 
+        output_prompt(format!("Server start: {}", address));
+
+        if self.config.repl {
+            output_prompt(format!("Connect to local server in REPL mode, user: {}", &self.config.local_user));
+
+            let config_copy = self.config.clone();
+
+            thread::spawn(move || {
+                let str_user = config_copy.local_user.as_str();
+                let user: Vec<&str> = str_user.split("@").collect();
+                let mut repl = RemoteRepl::new(
+                    config_copy.ip.clone(),
+                    config_copy.port.clone(),
+                    user[0].to_string(),
+                    user[1].to_string(),
+                    config_copy.default_db.clone()
+                ).unwrap();
+                repl.run();
+            });
+        }
+
+        let mut accepted_times = 0;
+
         loop {
+            if self.config.auto_fresh > 0 && accepted_times >= self.config.auto_fresh {
+                output_prompt("The server starts to refresh automatically...");
+                self.refresh()?;
+                output_prompt("Done!");
+            }
             let (stream, adr) = match listener.accept() {
                 Ok(r) => r,
                 Err(e) => {
@@ -80,6 +112,7 @@ impl Server {
                 }
             };
             output_prompt(format!("New connection: {}", adr));
+            accepted_times += 1;
 
             match self.handle_connection(stream,adr) {
                 Ok(()) => continue,
@@ -165,9 +198,7 @@ impl Server {
                     timeout: 0,
                     set_timeout: self.config.timeout.clone(),
                 };
-                thread::spawn(|| {
-                    client.handle_client();
-                });
+                self.new_client(client, key.clone());
                 return Ok(())
             }
         }
@@ -191,10 +222,38 @@ impl Server {
             timeout: 0,
             set_timeout: self.config.timeout.clone(),
         };
-        thread::spawn(|| {
+        self.new_client(client,db_path);
+        Ok(())
+    }
+    pub fn refresh(&mut self) -> Result<()> {
+        let mut should_close: HashMap<String, ()> = HashMap::new();
+        let mut dead_client: Vec<String> = Vec::new();
+        for (address, (path, thread_handle)) in &self.clients {
+            if thread_handle.is_finished() {
+                dead_client.push(address.clone());
+                should_close.insert(path.clone(),());
+                continue;
+            } else {
+                should_close.remove(path);
+            }
+        }
+        for address in &dead_client {
+            let _ = &self.clients.remove(address);
+        }
+        for (path,()) in &should_close {
+            self.dbs.remove(path);
+        }
+        Ok(())
+    }
+    fn new_client(&mut self, mut client: Client, datafile_index: String) {
+        let address = client.address.to_string();
+        let thread_handle = thread::spawn(move || {
             client.handle_client();
         });
-        Ok(())
+        let _ = &self.clients.insert(
+            address,
+            (datafile_index, thread_handle)
+        );
     }
     fn send_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
         let (buf, _) = Message::new(err).as_bytes()?;
@@ -230,28 +289,28 @@ pub struct Client {
 }
 
 impl Client {
-    fn handle_client(mut self) {
+    fn handle_client(&mut self) {
         loop {
             thread::sleep(time::Duration::from_secs(1 as u64));
 
-            if self.timeout >= self.set_timeout {
-                output_prompt(format!("Client [{0}] activity timeout", self.address));
-                let _ = self.stream.shutdown(Shutdown::Both);
+            if &self.timeout >= &self.set_timeout {
+                output_prompt(format!("Client [{0}] activity timeout", &self.address));
+                let _ = &self.stream.shutdown(Shutdown::Both);
                 break;
             }
-            match &self.accept_request() {
+            match &&self.accept_request() {
                 Ok(()) => continue,
                 Err(RorError::Disconnect) => {
-                    output_prompt(format!("Client [{0}] disconnected", self.address));
-                    let _ = self.stream.shutdown(Shutdown::Both);
+                    output_prompt(format!("Client [{0}] disconnected", &self.address));
+                    let _ = &self.stream.shutdown(Shutdown::Both);
                     break;
                 },
-                Err(RorError::KvError(e)) => output_prompt(format!("An error occurred on client [{0}], buffer flushed and error message sent. {1}",self.address,e)),
+                Err(RorError::KvError(e)) => output_prompt(format!("An error occurred on client [{0}], buffer flushed and error message sent. {1}",&self.address,e)),
                 Err(e) => {
-                    if let Err(_) = self.stream.shutdown(Shutdown::Both) {
-                        output_prompt(format!("Client [{0}] unable to properly disconnect, thread has been forcibly closed",self.address));
+                    if let Err(_) = &self.stream.shutdown(Shutdown::Both) {
+                        output_prompt(format!("Client [{0}] unable to properly disconnect, thread has been forcibly closed",&self.address));
                     }
-                    output_prompt(format!("An error occurred on client [{0}]. It may be fatal, the connection was forcibly terminated. {1}",self.address,e));
+                    output_prompt(format!("An error occurred on client [{0}]. It may be fatal, the connection was forcibly terminated. {1}",&self.address,e));
                     break;
                 }
             }
@@ -382,6 +441,10 @@ struct Config {
     port: String,
     data_path: String,
     timeout: u64,
+    repl: bool,
+    local_user: String,
+    default_db: String,
+    auto_fresh: u32,
 }
 
 impl Config {
@@ -392,6 +455,10 @@ impl Config {
             port: "11451".to_string(),
             data_path: "./data/".to_string(),
             timeout: 300,
+            repl: false,
+            local_user: String::new(),
+            default_db: String::new(),
+            auto_fresh: 20,
         }
     }
     pub fn get_server() -> Result<Self> {

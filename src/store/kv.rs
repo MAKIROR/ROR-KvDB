@@ -101,6 +101,7 @@ impl Entry {
     }
 }
 
+#[derive(Debug)]
 pub struct DataStore {
     pub path: String,
     file_reader: BufReader<File>,

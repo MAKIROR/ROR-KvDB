@@ -3,3 +3,7 @@ ip = "127.0.0.1"
 port = "11451"
 data_path = "./data/"
 timeout = 300
+repl = false
+local_user = "root@123456"
+default_db = "default.data"
+auto_fresh = 1
