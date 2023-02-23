@@ -3,7 +3,9 @@ use std::{
     io::{
         Read,
         Write,
+        ErrorKind,
     },
+    thread,
 };
 use super::{
     error::{RorError,Result},
@@ -54,15 +56,24 @@ impl Client {
         }
     }
     pub fn operate(&mut self, request: OperateRequest) -> Result<OperateResult> {
-        let body = Message::new(request);
+        let body = Message::new(request.clone());
         let (buf,_) = body.as_bytes()?;
 
         if let Err(_) = self.stream.write(&buf) {
-            return Err(RorError::ConnectionLost);
+            return Err(RorError::ConnectionLost(request));
         }
+        thread::sleep(std::time::Duration::from_millis(50));
 
         let mut size_buffer = [0 as u8; USIZE_SIZE];
-        self.stream.read_exact(&mut size_buffer)?;
+        match self.stream.read_exact(&mut size_buffer) {
+            Ok(_) => (),
+            Err(e) => {
+                if e.kind() == ErrorKind::UnexpectedEof {
+                    return Err(RorError::AbnormalConnection);
+                }
+                return Err(RorError::IOError(e));
+            }
+        }
         let reply_size = usize::from_be_bytes(size_buffer);
         let mut reply_buffer = vec![0; reply_size];
         self.stream.read_exact(&mut reply_buffer)?;

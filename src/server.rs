@@ -12,7 +12,7 @@ use std::{
     sync::{Arc,Mutex},
     thread::{self, JoinHandle},
     time,
-    path::PathBuf,
+    path::{PathBuf,Path},
 };
 use super::{
     error::{RorError,Result},
@@ -103,6 +103,7 @@ impl Server {
                 output_prompt("The server starts to refresh automatically...");
                 self.refresh()?;
                 output_prompt("Done!");
+                accepted_times = 0;
             }
             let (stream, adr) = match listener.accept() {
                 Ok(r) => r,
@@ -174,6 +175,11 @@ impl Server {
             }
         };
         let reader = BufReader::new(stream_clone);
+
+        let target_path = Path::new(&db_path);
+        if !target_path.exists() {
+            File::create(&db_path)?;
+        }
 
         for (key, db) in &self.dbs {
             let exists = match is_same_file(&key, &db_path) {

@@ -29,7 +29,7 @@ pub enum ConnectError {
     ServerError,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum OperateRequest {
     Get { key: String },
     Add { key: String, value: Value },

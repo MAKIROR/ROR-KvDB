@@ -206,10 +206,20 @@ impl RemoteRepl {
         loop {
             match self.match_command() {
                 Ok(()) => continue,
-                Err(RorError::ConnectionLost) => {
+                Err(RorError::ConnectionLost(op)) => {
                     output_prompt("Lost connection, trying to reconnect...");
                     match self.reconnect() {
-                        Ok(()) => continue,
+                        Ok(()) => {
+                            let result = match self.client.operate(op) {
+                                Ok(r) => r,
+                                Err(e) => {
+                                    program_crash(e);
+                                    break;
+                                }
+                            };
+                            Self::match_op_reply(result);
+                            continue;
+                        },
                         Err(_) => {
                             output_prompt("Connection lost, unable to reconnect, quit program");
                             break;
@@ -402,6 +412,12 @@ fn output_prompt(content: &str) {
 }
 
 fn quit_program() {
+    println!("Quit ROR Database");
+    std::process::exit(0);
+}
+
+fn program_crash(e: RorError) {
+    println!("Program exits: {}",e);
     println!("Quit ROR Database");
     std::process::exit(0);
 }

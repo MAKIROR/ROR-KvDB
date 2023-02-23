@@ -8,7 +8,6 @@ use std::{
         SeekFrom,
     },
     string::String,
-    path::Path,
     collections::HashMap,
     fs::{self, File,OpenOptions},
 };
@@ -20,7 +19,7 @@ const USIZE_SIZE: usize = std::mem::size_of::<usize>();
 const ENTRY_META_SIZE: usize = USIZE_SIZE * 2 + 4;
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
-#[derive(Serialize, Deserialize, PartialEq,Debug)]
+#[derive(Serialize, Deserialize, PartialEq,Debug, Clone)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -113,11 +112,6 @@ pub struct DataStore {
 
 impl DataStore {
     pub fn open(path: &str) -> Result<DataStore> {
-        let path_slice = Path::new(path);
-        if path_slice.is_dir() {
-            return Err(KvError::IsDir(path.to_string()));
-        }
-
         let file_writer = BufWriter::new(OpenOptions::new().write(true).append(true).create(true).open(path)?);
         let file_reader = BufReader::new(File::open(path)?);
         let mut result = DataStore {

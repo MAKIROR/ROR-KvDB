@@ -2,6 +2,7 @@ use thiserror::Error;
 use super::{
     store::kv_error::KvError,
     user::user_error::UserError,
+    request::OperateRequest,
 };
 
 #[derive(Error, Debug)]
@@ -44,7 +45,9 @@ pub enum RorError {
     #[error("Server encountered an unexpected error")]
     ServerError,
     #[error("Unable to communicate with the server, the connection may be interrupted, you can try to reconnect or check the server")]
-    ConnectionLost,
+    ConnectionLost(OperateRequest),
+    #[error("nable to communicate with server, possibly high latency or lost connection, please try this operation again")]
+    AbnormalConnection,
     #[error("Unable to parse data, probably it is incomplete")]
     IncompleteData,
 }

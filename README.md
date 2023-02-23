@@ -36,7 +36,7 @@ quit
 
 
 ## Server mode
-Start a remote kv database that can accept client connections.(No REPL)
+Start a remote kv database that can accept client connections.
 
 ### Configuration file
 The path to the configuration file is: ./config/server.toml
@@ -55,8 +55,17 @@ data_path = "./data/"
 
 # If the client is inactive for a certain period of time, it will automatically disconnect (Sec)
 timeout = 300
+
+# Enter a REPL-mode terminal at server startup
+repl = true
+
+# If repl is true, as the user and data file for the connection
+local_user = "root@123456"
+default_db = "default.data"
+
+# Perform a refresh operation when receiving n client connections to release idle data files and invalid connections.This operation will not be performed when it is 0.
+auto_fresh = 20
 ```
-!: worker_id and data_center_id in local mode, it will not be affected by the configuration file, it will be 0.
 
 <br>
 
@@ -167,6 +176,17 @@ makiror
 typeof [key]
 ```
 Print the type of Key-Value data.
+
+| Express | Output |
+| :----: | :----: |
+| null | Null |
+| bool | Bool |
+| int / i32 | Int |
+| long / i64 | Long |
+| float / f32 | Float |
+| double / i64 | Double |
+| string | String |
+| char | Char |
 
 ### list
 ```
