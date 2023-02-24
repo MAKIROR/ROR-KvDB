@@ -85,6 +85,10 @@ impl Server {
             thread::spawn(move || {
                 let str_user = config_copy.local_user.as_str();
                 let user: Vec<&str> = str_user.split("@").collect();
+                if user.len() != 2 {
+                    output_prompt("Failed to start REPL mode: invalid user");
+                    return;
+                }
                 let mut repl = RemoteRepl::new(
                     config_copy.ip.clone(),
                     config_copy.port.clone(),

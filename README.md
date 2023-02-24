@@ -3,7 +3,7 @@ A simple Key–Value Database.
 
 ## Tutorial Blog (Chinese Only) :    
 <a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part1.md" target="_blank">Part 1: Basic Storage Functions</a></br>
-<a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part2-3.md" target="_blank">User System and Network Services</a></br>
+<a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part2-3.md" target="_blank">Paet 2-3: User System and Network Services</a></br>
 
 ## Library
 Library for ROR Key-Value Database.(Rust)</br>
