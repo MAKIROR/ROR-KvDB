@@ -8,3 +8,4 @@ mod client;
 mod request;
 mod error;
 mod repl;
+mod cmd;
