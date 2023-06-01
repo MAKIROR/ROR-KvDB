@@ -55,6 +55,7 @@ impl Client {
             ConnectReply::Error(ConnectError::ServerError) => return Err(RorError::ServerError),
         }
     }
+    
     pub fn operate(&mut self, request: OperateRequest) -> Result<OperateResult> {
         let body = Message::new(request.clone());
         let (buf,_) = body.as_bytes()?;

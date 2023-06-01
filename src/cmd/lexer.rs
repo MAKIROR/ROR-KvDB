@@ -1,4 +1,6 @@
-use super::token::*;
+use super::{
+    token::token::*,
+};
 
 pub fn lex(text: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
@@ -11,17 +13,17 @@ pub fn lex(text: &str) -> Vec<Token> {
             }
             '\'' | '"' => {
                 if let Some(quote) = chars.next() {
-                    let literal = collect_until(&mut chars, |c, _| c == quote);
+                    let literal = collect_until(&mut chars, |c| c == quote);
                     tokens.push(Token::Identifier(literal));
                     chars.next();
                 }
             }
             token if token.is_ascii_digit() => {
-                let num = collect_until(&mut chars, |c, _| !c.is_ascii_digit() && c != '.');
+                let num = collect_until(&mut chars, |c| !c.is_ascii_digit() && c != '.');
                 tokens.push(Token::Number(num));
             }
             _ => {
-                let text = collect_until(&mut chars, |c, result| !c.is_alphanumeric() && c != '_' );
+                let text = collect_until(&mut chars, |c| !c.is_alphanumeric() && c != '_' );
                 if let Some(command) = text.as_command() {
                     tokens.push(Token::Command(command));
                 } else if let Some(datatype) = text.as_datatype() {
@@ -39,12 +41,12 @@ pub fn lex(text: &str) -> Vec<Token> {
 
 fn collect_until<F>(chars: &mut std::iter::Peekable<std::str::Chars>, condition: F) -> String
 where
-    F: Fn(char, String) -> bool,
+    F: Fn(char) -> bool,
 {
     let mut result = String::new();
 
     while let Some(&c) = chars.peek() {
-        if condition(c, result.clone()) {
+        if condition(c) {
             break;
         }
         result.push(c);

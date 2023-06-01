@@ -1,2 +1,5 @@
+pub mod parser;
 mod token;
-pub mod lexer;
+mod lexer;
+mod cmd_error;
+mod statement;

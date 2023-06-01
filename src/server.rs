@@ -54,6 +54,7 @@ impl Server {
             clients: HashMap::new(),
         };
     }
+    
     pub fn init() -> Result<()> {
         fs::create_dir("config")?;
         let server_config = toml::to_string(&Config::default())?;
@@ -70,6 +71,7 @@ impl Server {
 
         Ok(())
     }
+
     pub fn start(&mut self) -> Result<()> {
         let address = format!("{0}:{1}", self.config.ip,&self.config.port);
         let listener = TcpListener::bind(address.clone())?;
@@ -130,6 +132,7 @@ impl Server {
             }
         }
     }
+
     fn handle_connection(&mut self, mut stream: TcpStream, address: SocketAddr) -> Result<()> {
         let mut size_buffer = [0 as u8; USIZE_SIZE];
         stream.read_exact(&mut size_buffer)?;
@@ -235,6 +238,7 @@ impl Server {
         self.new_client(client,db_path);
         Ok(())
     }
+
     pub fn refresh(&mut self) -> Result<()> {
         let mut should_close: HashMap<String, ()> = HashMap::new();
         let mut dead_client: Vec<String> = Vec::new();
@@ -255,6 +259,7 @@ impl Server {
         }
         Ok(())
     }
+
     fn new_client(&mut self, mut client: Client, datafile_index: String) {
         let address = client.address.to_string();
         let thread_handle = thread::spawn(move || {
@@ -265,17 +270,20 @@ impl Server {
             (datafile_index, thread_handle)
         );
     }
+
     fn send_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
         let (buf, _) = Message::new(err).as_bytes()?;
         stream.write(&buf.as_slice())?;
         stream.shutdown(Shutdown::Both)?;
         Ok(())
     }
+
     fn send_reply(stream: &mut TcpStream) -> Result<()> {
         let (buf, _) = Message::new(ConnectReply::Success).as_bytes()?;
         stream.write(&buf.as_slice())?;
         Ok(())
     }
+
     fn open_new_db(&mut self, path: String) -> Result<Arc<Mutex<DataStore>>> {
         let db = Arc::new(
             Mutex::new(
@@ -326,6 +334,7 @@ impl Client {
             }
         }
     }
+
     fn accept_request(&mut self) -> Result<()> {
         let mut size_buffer = [0 as u8; USIZE_SIZE];
         match self.reader.read_exact(&mut size_buffer) {
@@ -366,6 +375,7 @@ impl Client {
             Err(e) => return Err(e),
         }
     }
+
     fn match_command(&mut self, command: OperateRequest) -> Result<OperateResult> {
         match command {
             OperateRequest::Get { key } => {
