@@ -23,8 +23,8 @@ pub enum Statement {
         value: Value
     },
     Delete { key: String },
-    Compact,
     Get { key: String },
+    Compact,
     TypeOf { key: String },
     List { list: List },
     User { cmd: UserCmd },
@@ -36,7 +36,6 @@ pub enum Value {
     Identifier(String),
     Number(String),
     Bool(bool),
-    Null,
 }
 
 #[derive(Clone, Debug)]
@@ -53,7 +52,7 @@ pub enum UserCmd {
 
 #[derive(Clone, Debug)]
 pub struct UserInfo {
-    name: String,
-    password: String,
-    level: String,
+    pub name: String,
+    pub password: String,
+    pub level: String,
 }

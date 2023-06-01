@@ -222,3 +222,9 @@ Look! Invalid data is cleaned up!
 ```
 quit
 ```
+
+### Update plan
++ Basic syntax analysis support (next version)
++ recursive datatype (next version)
++ Basic expression support
++ Conditional expression query

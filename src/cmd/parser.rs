@@ -42,15 +42,15 @@ impl Parser {
         let cmd = match self.iter.peek() {
             Some(Token::Command(Command::Create)) => {
                 self.iter.next();
-                let user_info = self.parse_args()?;
+                let user_info = self.parse_str_args()?;
                 if user_info.len() != 3 {
                     return Err(CmdError::ParameterError("create user".to_string()));
                 }
                 UserCmd::Create {
                     info : UserInfo {
-                        name: user_info[0],
-                        password: user_info[1],
-                        level: user_info[2]
+                        name: user_info[0].clone(),
+                        password: user_info[1].clone(),
+                        level: user_info[2].clone()
                     }
                 }
             },
@@ -61,7 +61,8 @@ impl Parser {
                 }
                 return Err(CmdError::MissingArg);
             }
-            _ => return Err(CmdError::UnexpectedToken(t.clone())),
+            Some(t) => return Err(CmdError::UnexpectedToken(t.clone())),
+            None => return Err(CmdError::MissingSubCmd),
         };
 
         Ok(Statement::User{ cmd })
@@ -86,6 +87,26 @@ impl Parser {
             });
         }
         Err(CmdError::MissingPath)
+    }
+
+    fn parse_str_args(&mut self) -> Result<Vec<String>> {
+        match_token(&self.iter.next(), Token::Symbol(Symbol::LeftParen))?;
+        let mut args: Vec<String> = Vec::new();
+    
+        loop {
+            match self.iter.peek() {
+                Some(Token::Symbol(Symbol::RightParen)) => break,
+                Some(Token::Identifier(v)) => {
+                    args.push(v.clone());
+                    if let Some(Token::Symbol(Symbol::Comma)) = self.iter.peek() {
+                        self.iter.next();
+                    }
+                },
+                _ => return Err(CmdError::MissingValue),
+            }
+        }
+        self.iter.next();
+        Ok(args)
     }
 
     fn parse_args(&mut self) -> Result<Vec<Value>> {

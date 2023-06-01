@@ -13,6 +13,8 @@ pub enum CmdError {
     MissingArg,
     #[error("Missing value")]
     MissingValue,
+    #[error("Missing subcommand")]
+    MissingSubCmd,
 
     #[error("Incorrect argument to command '{0}'")]
     ParameterError(String),
