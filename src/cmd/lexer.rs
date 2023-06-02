@@ -1,5 +1,8 @@
 use super::{
-    token::token::*,
+    token::{
+        token::*,
+        symbol::SymbolExtChar
+    },
 };
 
 pub fn lex(text: &str) -> Vec<Token> {
@@ -21,6 +24,19 @@ pub fn lex(text: &str) -> Vec<Token> {
             token if token.is_ascii_digit() => {
                 let num = collect_until(&mut chars, |c| !c.is_ascii_digit() && c != '.');
                 tokens.push(Token::Number(num));
+            }
+            token if token.is_symbol() => {
+                let mut symbol = token.to_string();
+
+                if token.has_next(&mut chars) {
+                    symbol.push(chars.next().take().unwrap());
+                } else {
+                    chars.next();
+                }
+
+                if let Some(s) = symbol.as_symbol() {
+                    tokens.push(Token::Symbol(s));
+                }
             }
             _ => {
                 let text = collect_until(&mut chars, |c| !c.is_alphanumeric() && c != '_' );

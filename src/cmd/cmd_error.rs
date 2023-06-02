@@ -13,6 +13,8 @@ pub enum CmdError {
     MissingArg,
     #[error("Missing value")]
     MissingValue,
+    #[error("Missing key")]
+    MissingKey,
     #[error("Missing subcommand")]
     MissingSubCmd,
 

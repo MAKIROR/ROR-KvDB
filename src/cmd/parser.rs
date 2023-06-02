@@ -28,6 +28,9 @@ impl Parser {
         self.iter = tokens.clone().into_iter().peekable();
         let statement = match tokens.get(0) {
             Some(Token::Command(Command::Open)) => self.parse_open()?,
+            Some(Token::Command(Command::Delete)) => self.parse_delete()?,
+            Some(Token::Command(Command::Get)) => self.parse_get()?,
+            Some(Token::Command(Command::TypeOf)) => self.parse_typeof()?,
             Some(Token::Command(Command::User)) => self.parse_user()?,
             Some(Token::Command(Command::Compact)) => Statement::Compact,
             Some(Token::Command(Command::Quit)) => Statement::Quit,
@@ -35,6 +38,63 @@ impl Parser {
             None => return Err(CmdError::MissingStatement),
         };
         Ok(statement)
+    }
+
+    fn parse_add(&mut self) -> Result<Statement> {
+        match_token(&self.iter.next(), Token::Command(Command::Add))?;
+        let key = self.parse_key()?;
+        let value = self.parse_value()?;
+        let datatype = self.parse_datatype()?;
+        Ok(Statement::Add { key, value, datatype })
+    }
+
+    fn parse_datatype(&mut self) -> Result<ValueType> {
+        let datatype = match self.iter.peek() {
+            Some(Token::DataType(DataType::Null)) => ValueType::Null,
+            Some(Token::DataType(DataType::Bool)) => ValueType::Bool,
+            Some(Token::DataType(DataType::Int)) => ValueType::Int,
+            Some(Token::DataType(DataType::Long)) => ValueType::Long,
+            Some(Token::DataType(DataType::Float)) => ValueType::Float,
+            Some(Token::DataType(DataType::Double)) => ValueType::Double,
+            Some(Token::DataType(DataType::Char)) => ValueType::Char,
+            Some(Token::DataType(DataType::String)) => ValueType::String,
+            Some(Token::DataType(DataType::Array)) => {
+                self.iter.next();
+                match_token(&self.iter.next(), Token::Symbol(Symbol::LeftParen))?;
+                let include_type = Box::new(self.parse_datatype()?);
+                match_token(&self.iter.next(), Token::Symbol(Symbol::RightParen))?;
+                ValueType::Array(include_type)
+            },
+            _ => return Ok(ValueType::String),
+        };
+        self.iter.next();
+
+        Ok(datatype)
+    }
+
+    fn parse_typeof(&mut self) -> Result<Statement> {
+        match_token(&self.iter.next(), Token::Command(Command::TypeOf))?;
+        let key = self.parse_key()?;
+        Ok(Statement::TypeOf { key })
+    }
+
+    fn parse_get(&mut self) -> Result<Statement> {
+        match_token(&self.iter.next(), Token::Command(Command::Get))?;
+        let key = self.parse_key()?;
+        Ok(Statement::Get { key })
+    }
+
+    fn parse_delete(&mut self) -> Result<Statement> {
+        match_token(&self.iter.next(), Token::Command(Command::Delete))?;
+        let key = self.parse_key()?;
+        Ok(Statement::Delete { key })
+    }
+
+    fn parse_key(&mut self) -> Result<String> {
+        if let Ok(Value::Identifier(s)) = self.parse_value() {
+            return Ok(s);
+        }
+        Err(CmdError::MissingKey)
     }
 
     fn parse_user(&mut self) -> Result<Statement> {

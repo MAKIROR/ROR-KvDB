@@ -97,6 +97,19 @@ impl StringExt for String {
     }
 }
 
+pub trait SqlCharExt {
+    fn is_symbol(&self) -> bool;
+}
+
+impl SqlCharExt for char {
+    fn is_symbol(&self) -> bool {
+        if to_symbol(&self.to_string().as_str()).is_some() {
+            return true
+        }
+        false
+    }
+}
+
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

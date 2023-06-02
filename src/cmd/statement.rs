@@ -4,6 +4,19 @@ pub trait TokenExt {
     fn to_value(&self) -> Option<Value>;
 }
 
+#[derive(Clone, Debug)]
+pub enum ValueType {
+    Null,
+    Bool,
+    Int,
+    Long,
+    Float,
+    Double,
+    Char,
+    String,
+    Array(Box<ValueType>)
+}
+
 impl TokenExt for Option<Token> {
     fn to_value(&self) -> Option<Value> {
         match self {
@@ -20,7 +33,8 @@ pub enum Statement {
     Open { file: String },
     Add {
         key: String,
-        value: Value
+        value: Value,
+        datatype: ValueType
     },
     Delete { key: String },
     Get { key: String },
