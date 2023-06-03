@@ -30,25 +30,22 @@ pub struct User {
 }
 
 impl User {
-    pub fn register( name: &str, password: &str, level: &str ) -> Result<()> {
+    pub fn register( name: String, password: String, level: String ) -> Result<()> {
         let password_regex = Regex::new(r"^[a-zA-Z0-9_-]{4,16}$")?;
         if !password_regex.is_match(&password) {
-            return Err(UserError::PassWordFormatError(password.to_string()));
+            return Err(UserError::PassWordFormatError(password));
         }
         let name_len = name.chars().count();
         if name_len < 2 || name_len > 20 {
             return Err(UserError::NameLengthError(name_len));
         }
-        let mut user = match level {
-            "0"
-            | "1"
-            | "2"
-            | "3" => User {
-                name: name.to_string(),
-                password: password.to_string(),
-                level: level.to_string(),
+        let mut user = match level.as_str() {
+            "0" | "1" | "2" | "3" => User {
+                name: name,
+                password: password,
+                level: level,
             },
-            _ => return Err(UserError::UnknownLevel(level.to_string())),
+            _ => return Err(UserError::UnknownLevel(level)),
         };
 
         let config_path = USER_PATH.clone();
@@ -69,6 +66,7 @@ impl User {
         write!(file, "{}", json)?;
         Ok(())
     }
+
     pub fn login( name: String, password: String ) -> Result<Self> {
         let config_path = USER_PATH.clone();
         let str_data = fs::read_to_string(&config_path)?;
@@ -83,6 +81,24 @@ impl User {
             return Err(UserError::WrongPassWord);
         }
     }
+
+    pub fn delete( name: String ) -> Result<()> {
+        let config_path = USER_PATH.clone();
+        let str_data = fs::read_to_string(&config_path)?;
+        let mut data: Vec<User> = serde_json::from_str(&str_data)?;
+        for (i, user) in data.iter().enumerate() {
+            if user.name == name {
+                data.remove(i);
+                
+                let json = serde_json::to_string(&data)?;
+                let mut file = File::create(&config_path)?;
+                write!(file, "{}", json)?;
+
+                return Ok(())
+            }
+        }
+        Err(UserError::UserNotFound(name))
+    }
     
     fn search(data: &Vec<User>, name: String) -> Result<Self> {
         for u in data {
@@ -94,14 +110,17 @@ impl User {
         }
         Err(UserError::UserNotFound(name))
     }
+
     fn encode(&mut self) {
         self.password = general_purpose::STANDARD_NO_PAD.encode(self.password.clone());
     }
+
     fn decode(&mut self) -> Result<()> {
         let bytes = general_purpose::STANDARD_NO_PAD.decode(self.password.clone())?;
         self.password = std::str::from_utf8(&bytes)?.to_string();
         Ok(())
     }
+
     pub fn test_file() -> Result<()> {
         let config_path = USER_PATH.clone();
 

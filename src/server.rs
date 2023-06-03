@@ -67,7 +67,7 @@ impl Server {
         File::create("data/default.data")?;
 
         User::test_file()?;
-        User::register("root","123456","3")?;
+        User::register("root".to_string(), "123456".to_string(), "3".to_string())?;
 
         Ok(())
     }
@@ -379,7 +379,7 @@ impl Client {
     fn match_command(&mut self, command: OperateRequest) -> Result<OperateResult> {
         match command {
             OperateRequest::Get { key } => {
-                match self.db.lock().unwrap().get(&key) {
+                match self.db.lock().unwrap().get(key) {
                     Ok(v) => {
                         return Ok(OperateResult::Found(v));
                     }
@@ -391,7 +391,7 @@ impl Client {
                 if self.level != "2" && self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
-                match self.db.lock().unwrap().delete(&key) {
+                match self.db.lock().unwrap().delete(key) {
                     Ok(_) => {
                         return Ok(OperateResult::Success);
                     }
@@ -403,32 +403,45 @@ impl Client {
                 if self.level != "1" && self.level != "2" && self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
-                match self.db.lock().unwrap().add(&key,value) {
+                match self.db.lock().unwrap().add(key,value) {
                     Ok(_) => {
                         return Ok(OperateResult::Success);
                     }
                     Err(e) => return Err(RorError::KvError(e)),
                 }
             }
-            OperateRequest::CreateUser { username, password, level } => {
+            OperateRequest::CreateUser { name, password, level } => {
                 if self.level != "3" {
                     return Ok(OperateResult::PermissionDenied);
                 }
 
                 match User::register(                    
-                    &username.as_str(),
-                    &password.as_str(),
-                    &level.as_str()
+                    name,
+                    password,
+                    level
                 ) {
                     Ok(_) => return Ok(OperateResult::Success),
                     Err(e) => {
-                        output_prompt(format!("Unable to create new user for client [{0}], {1}",self.address,e));
+                        output_prompt(format!("Unable to create new user for client [{0}], {1}", self.address, e));
+                        return Ok(OperateResult::Failure);
+                    }
+                }
+            },
+            OperateRequest::DeleteUser { name } => {
+                if self.level != "3" {
+                    return Ok(OperateResult::PermissionDenied);
+                }
+
+                match User::delete(name.clone()) {
+                    Ok(_) => Ok(OperateResult::Success),
+                    Err(e) => {
+                        output_prompt(format!("Unable to delete user '{0}' for client [{1}], {2}", name, self.address, e));
                         return Ok(OperateResult::Failure);
                     }
                 }
             }
             OperateRequest::GetType { key } => {
-                match self.db.lock().unwrap().get(&key) {
+                match self.db.lock().unwrap().get(key) {
                     Ok(v) => {
                         return Ok(OperateResult::Type(DataStore::type_of(v)));
                     }

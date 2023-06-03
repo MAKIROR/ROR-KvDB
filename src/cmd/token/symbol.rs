@@ -18,6 +18,8 @@ pub enum Symbol {
     LeftParen,
     RightParen,
     Semicolon,
+    LeftBracket,
+    RightBracket
 }
 
 impl Symbol {
@@ -67,6 +69,8 @@ pub fn to_symbol(s: &str) -> Option<Symbol> {
         "(" => Some(Symbol::LeftParen),
         ")" => Some(Symbol::RightParen),
         ";" => Some(Symbol::Semicolon),
+        "[" => Some(Symbol::LeftBracket),
+        "]" => Some(Symbol::RightBracket),
         _ => None,
     }
 }
@@ -90,6 +94,8 @@ impl fmt::Display for Symbol {
             Symbol::LeftParen => write!(f, "("),
             Symbol::RightParen => write!(f, ")"),
             Symbol::Semicolon => write!(f, ";"),
+            Symbol::LeftBracket => write!(f, "["),
+            Symbol::RightBracket => write!(f, "]")
         }
     }
 }

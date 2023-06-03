@@ -28,10 +28,12 @@ impl Parser {
         self.iter = tokens.clone().into_iter().peekable();
         let statement = match tokens.get(0) {
             Some(Token::Command(Command::Open)) => self.parse_open()?,
+            Some(Token::Command(Command::Add)) => self.parse_add()?,
             Some(Token::Command(Command::Delete)) => self.parse_delete()?,
             Some(Token::Command(Command::Get)) => self.parse_get()?,
             Some(Token::Command(Command::TypeOf)) => self.parse_typeof()?,
             Some(Token::Command(Command::User)) => self.parse_user()?,
+            Some(Token::Command(Command::List)) => self.parse_list()?,
             Some(Token::Command(Command::Compact)) => Statement::Compact,
             Some(Token::Command(Command::Quit)) => Statement::Quit,
             Some(t) => return Err(CmdError::UnexpectedToken(t.clone())),
@@ -43,8 +45,12 @@ impl Parser {
     fn parse_add(&mut self) -> Result<Statement> {
         match_token(&self.iter.next(), Token::Command(Command::Add))?;
         let key = self.parse_key()?;
-        let value = self.parse_value()?;
         let datatype = self.parse_datatype()?;
+        let value = match datatype {
+            ValueType::Array(_) => self.parse_array()?,
+            _ => self.parse_value()?
+        };
+
         Ok(Statement::Add { key, value, datatype })
     }
 
@@ -52,10 +58,10 @@ impl Parser {
         let datatype = match self.iter.peek() {
             Some(Token::DataType(DataType::Null)) => ValueType::Null,
             Some(Token::DataType(DataType::Bool)) => ValueType::Bool,
-            Some(Token::DataType(DataType::Int)) => ValueType::Int,
-            Some(Token::DataType(DataType::Long)) => ValueType::Long,
-            Some(Token::DataType(DataType::Float)) => ValueType::Float,
-            Some(Token::DataType(DataType::Double)) => ValueType::Double,
+            Some(Token::DataType(DataType::Int32)) => ValueType::Int32,
+            Some(Token::DataType(DataType::Int64)) => ValueType::Int64,
+            Some(Token::DataType(DataType::Float32)) => ValueType::Float32,
+            Some(Token::DataType(DataType::Float64)) => ValueType::Float64,
             Some(Token::DataType(DataType::Char)) => ValueType::Char,
             Some(Token::DataType(DataType::String)) => ValueType::String,
             Some(Token::DataType(DataType::Array)) => {
@@ -91,7 +97,7 @@ impl Parser {
     }
 
     fn parse_key(&mut self) -> Result<String> {
-        if let Ok(Value::Identifier(s)) = self.parse_value() {
+        if let Ok(ValueP::Identifier(s)) = self.parse_value() {
             return Ok(s);
         }
         Err(CmdError::MissingKey)
@@ -116,7 +122,7 @@ impl Parser {
             },
             Some(Token::Command(Command::Delete)) => {
                 self.iter.next();
-                if let Value::Identifier(s) = self.parse_value()? {
+                if let ValueP::Identifier(s) = self.parse_value()? {
                     UserCmd::Delete { name: s };
                 }
                 return Err(CmdError::MissingArg);
@@ -141,7 +147,7 @@ impl Parser {
 
     fn parse_open(&mut self) -> Result<Statement> {
         match_token(&self.iter.next(), Token::Command(Command::Open))?;
-        if let Some(Value::Identifier(s)) = self.iter.next().to_value() {
+        if let Some(ValueP::Identifier(s)) = self.iter.next().to_value() {
             return Ok(Statement::Open { 
                 file: s
             });
@@ -169,36 +175,37 @@ impl Parser {
         Ok(args)
     }
 
-    fn parse_args(&mut self) -> Result<Vec<Value>> {
-        match_token(&self.iter.next(), Token::Symbol(Symbol::LeftParen))?;
-        let mut args: Vec<Value> = Vec::new();
-    
+    fn parse_value(&mut self) -> Result<ValueP> {
+        let value = match self.iter.peek() {
+            Some(Token::Identifier(s)) => ValueP::Identifier(s.clone()),
+            Some(Token::Number(n)) => ValueP::Number(n.clone()),
+            Some(Token::Bool(b)) => ValueP::Bool(*b),
+            _ => return Err(CmdError::MissingValue),
+        };
+        self.iter.next();
+        Ok(value)
+    }
+
+    fn parse_array(&mut self) -> Result<ValueP> {
+        match_token(&self.iter.next(), Token::Symbol(Symbol::LeftBracket))?;
+        let mut array = Vec::new();
+
         loop {
             match self.iter.peek() {
-                Some(Token::Symbol(Symbol::RightParen)) => break,
-                Some(t) => (),
+                Some(Token::Symbol(Symbol::RightBracket)) => break,
+                Some(_) => (),
                 _ => return Err(CmdError::MissingValue),
             }
             if let Ok(v) = self.parse_value() {
-                args.push(v);
+                array.push(v);
                 if let Some(Token::Symbol(Symbol::Comma)) = self.iter.peek() {
                     self.iter.next();
                 }
             }
         }
-        self.iter.next();
-        Ok(args)
-    }
 
-    fn parse_value(&mut self) -> Result<Value> {
-        let value = match self.iter.peek() {
-            Some(Token::Identifier(s)) => Value::Identifier(s.clone()),
-            Some(Token::Number(n)) => Value::Number(n.clone()),
-            Some(Token::Bool(b)) => Value::Bool(*b),
-            _ => return Err(CmdError::MissingValue),
-        };
         self.iter.next();
-        Ok(value)
+        Ok(ValueP::Array(Box::new(array)))
     }
 }
 

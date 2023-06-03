@@ -3,6 +3,10 @@ use super::{
     store::kv_error::KvError,
     user::user_error::UserError,
     request::OperateRequest,
+    cmd::{
+        cmd_error::CmdError,
+        statement::ValueType
+    },
 };
 
 #[derive(Error, Debug)]
@@ -19,11 +23,13 @@ pub enum RorError {
     KvError(#[from] KvError),
     #[error("{0}")]
     UserError(#[from] UserError),
+    #[error("{0}")]
+    CmdError(#[from] CmdError),
 
     #[error("Datafile Not found :{0}")]
     DataFileNotFound(String),
     #[error("Cannot convert '{0}' to {1}")]
-    ConvertError(String,String),
+    ConvertError(String, ValueType),
     #[error("Incorrect argument to command '{0}'")]
     ParameterError(String),
     #[error("Unknown type '{0}'")]

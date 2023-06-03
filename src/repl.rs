@@ -1,12 +1,16 @@
 use std::io::{self, Write};
 use super::{
-    error::{RorError,Result},
+    error::{RorError, Result},
     store::{
-        kv::{DataStore,Value},
+        kv::{DataStore, Value},
     },
     client::Client,
     request::*,
     user::user::User,
+    cmd::{
+        parser::Parser,
+        statement::*,
+    }
 };
 use chrono::prelude::Local;
 
@@ -21,6 +25,7 @@ impl LocalRepl {
             database,
         })
     }
+
     pub fn run(&mut self) {
         loop {
             if let Err(e) = self.match_command() {
@@ -28,137 +33,67 @@ impl LocalRepl {
             }
         }
     }
+
     pub fn match_command(&mut self) -> Result<()> {
-        print!("{0} > ",self.database.path);
+        print!("{0} > ", self.database.path);
         io::stdout().flush()?;
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
         if input == "\n" {
             return Ok(())
         }
-        let command :Vec<&str> = input.trim().split(" ").collect();  
-        match command[0] {
-            "open" => {
-                if command.len() != 2 {
-                    return Err(RorError::ParameterError("open".to_string()));
-                }
-                let db = DataStore::open(command[1])?;
-                self.database = db;
-                println!("successfully opened '{}' \n", command[1]);
-            }
-            "add" => {
-                if command.len() == 4 {
-                    let value: Value = match command[3] {
-                        "null" => Value::Null,
-                        "bool" => {
-                            match command[2] {
-                                "true" | "True"| "TRUE" => Value::Bool(true),
-                                "false" | "False" | "FALSE" => Value::Bool(false),
-                                _ => return Err(RorError::ConvertError(command[2].to_string(), "Bool".to_string())),
-                            }
-                        }
-                        "i32" | "int" => {
-                            match command[2].parse::<i32>() {
-                                Ok(value) => Value::Int32(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Int32".to_string())),
-                            }
-                        }
-                        "i64" | "long" => {
-                            match command[2].parse::<i64>() {
-                                Ok(value) => Value::Int64(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Int64".to_string())),
-                            }
-                        }
-                        "f32" | "float" => {
-                            match command[2].parse::<f32>() {
-                                Ok(value) => Value::Float32(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Float32".to_string())),
-                            }
-                        }
-                        "f64" | "double" => {
-                            match command[2].parse::<f64>() {
-                                Ok(value) => Value::Float64(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Float64".to_string())),
-                            }
-                        }
-                        "char" => Value::Char(command[2].chars().collect()),
-                        "string" => Value::String(command[2].to_string()),
-                        _ => return Err(RorError::UnknownType(command[3].to_string())),
-                    };
-                    self.database.add(command[1],value)?;
-                } else if command.len() == 3 {
-                    self.database.add(command[1], Value::String(command[2].to_string()))?;
-                } else {
-                    return Err(RorError::ParameterError("add".to_string()));
-                }
-                println!("Successfully added data {0} : {1}\n",command[1],command[2]);
-            }
-            "delete" => {
-                if command.len() != 2 {
-                    return Err(RorError::ParameterError("delete".to_string()));
-                }
-                self.database.delete(command[1])?;
-                println!("Successfully delete data {}\n",command[1]);
-            }, 
-            "compact" => {
-                if command.len() != 1 {
-                    return Err(RorError::ParameterError("compact".to_string()));
-                }
+        let mut parser = Parser::new();
+        match parser.parse(&input)? {
+            Statement::Open { file } => {
+                self.database = DataStore::open(&file)?;
+                println!("successfully opened '{}' \n", file);
+            },
+            Statement::Add { key, value, datatype } => {
+                let db_value = to_value(value.clone(), datatype)?;
+                self.database.add(key.clone(), db_value.clone())?;
+                println!("Successfully added data {0} : {1}\n", key, value);
+            },
+            Statement::Delete { key } => {
+                self.database.delete(key.clone())?;
+                println!("Successfully delete data {}\n", key);
+            },
+            Statement::Get { key } => {
+                let value = self.database.get(key)?;
+                println!("{:?}\n", value);
+            },
+            Statement::Compact => {
                 self.database.compact()?;
                 println!("Datafile {} has been compacted\n", self.database.path);
             },
-            "get" => {
-                if command.len() != 2 {
-                    return Err(RorError::ParameterError("get".to_string()));
-                }
-                let value: Value = self.database.get(command[1])?;
-                let str_value = match value {
-                    Value::Null => "Null".to_string(),
-                    Value::String(v) => v,
-                    Value::Bool(v) => v.to_string(),
-                    Value::Int32(v) => v.to_string(),
-                    Value::Int64(v) => v.to_string(),
-                    Value::Float32(v) => v.to_string(),
-                    Value::Float64(v) => v.to_string(),
-                    Value::Char(v) => {
-                        let mut string = String::new();
-                        for c in v {
-                            string.push(c);
-                        }
-                        string
+            Statement::TypeOf { key } => {
+                let value = self.database.get(key)?;
+                println!("{}\n", DataStore::type_of(value));
+            },
+            Statement::List { list } => {
+                match list {
+                    List::Values => {
+                        let data = self.database.get_all_value()?;
+                        println!("{:?}\n", data);
+                    },
+                    List::Entries => {
+                        let data = self.database.get_all_entry()?;
+                        println!("{:?}\n", data);
                     }
-                };
-                println!("{}\n",str_value);
-            },
-            "typeof"  => {
-                if command.len() != 2 {
-                    return Err(RorError::ParameterError("typeof".to_string()));
-                }
-                let value: Value = self.database.get(command[1])?;
-                println!("{}\n",DataStore::type_of(value));
-            },
-            "list"  => {
-                if command[1] == "values" {
-                    let data = self.database.get_all_value()?;
-                    println!("{:?}\n",data);
-                } else if command[1] == "entries" {
-                    let data = self.database.get_all_entry()?;
-                    println!("{:?}\n",data);
-                } else {
-                    println!("Unknown\n");
                 }
             },
-            "user" => {
-                if command[1] == "create" {
-                    if command.len() != 5 {
-                        return Err(RorError::ParameterError("create user".to_string()));
+            Statement::User { cmd } => {
+                match cmd {
+                    UserCmd::Create { info } => {
+                        User::register(info.name.clone(), info.password, info.level)?;
+                        println!("Successfully create user '{0}\n'", info.name);   
+                    },
+                    UserCmd::Delete { name } => {
+                        User::delete(name.clone())?;
+                        println!("Successfully delete user '{0}\n'", name); 
                     }
-                    User::register(command[2],command[3],command[4])?;
-                    println!("Successfully create user '{0}\n'",command[2]);   
                 }
-            }
-            "quit" => quit_program(),
-            _ => return Err(RorError::UnknownCommand(command[0].to_string())),
+            },
+            Statement::Quit => quit_program()
         }
         Ok(())
     }
@@ -230,6 +165,7 @@ impl RemoteRepl {
             }
         }
     }
+    
     fn match_command(&mut self) -> Result<()> {
         print!("{0}:{1} > ",self.info.ip, self.info.port);
         io::stdout().flush()?;
@@ -238,151 +174,45 @@ impl RemoteRepl {
         if input == "\n" {
             return Ok(())
         }
-        input = input.trim().to_string();
-        let command :Vec<&str> = input.split(" ").collect();  
-        match command[0] {
-            "add" => {
-                if command.len() == 4 {
-                    let value: Value = match command[3] {
-                        "null" => Value::Null,
-                        "bool" => {
-                            match command[2] {
-                                "true" | "True"| "TRUE" => Value::Bool(true),
-                                "false" | "False" | "FALSE" => Value::Bool(false),
-                                _ => return Err(RorError::ConvertError(command[2].to_string(), "Bool".to_string())),
-                            }
-                        }
-                        "i32" | "int" => {
-                            match command[2].parse::<i32>() {
-                                Ok(value) => Value::Int32(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Int32".to_string())),
-                            }
-                        }
-                        "i64" | "long" => {
-                            match command[2].parse::<i64>() {
-                                Ok(value) => Value::Int64(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Int64".to_string())),
-                            }
-                        }
-                        "f32" | "float" => {
-                            match command[2].parse::<f32>() {
-                                Ok(value) => Value::Float32(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Float32".to_string())),
-                            }
-                        }
-                        "f64" | "double" => {
-                            match command[2].parse::<f64>() {
-                                Ok(value) => Value::Float64(value),
-                                Err(_) => return Err(RorError::ConvertError(command[2].to_string(), "Float64".to_string())),
-                            }
-                        }
-                        "char" => Value::Char(command[2].chars().collect()),
-                        "string" => Value::String(command[2].to_string()),
-                        _ => return Err(RorError::UnknownType(command[3].to_string())),
-                    };
-                    let op = OperateRequest::Add {
-                        key: command[1].to_string(),
-                        value,
-                    };
-                    let result = self.client.operate(op)?;
-                    Self::match_op_reply(result);
-                } else if command.len() == 3 {
-                    let op = OperateRequest::Add {
-                        key: command[1].to_string(),
-                        value: Value::String(command[2].to_string()),
-                    };
-                    let result = self.client.operate(op)?;
-                    Self::match_op_reply(result);
-                } else {
-                    return Err(RorError::ParameterError("add".to_string()));
+        let mut parser = Parser::new();
+        let op = match parser.parse(&input)? {
+            Statement::Add { key, value, datatype } => {
+                OperateRequest::Add {
+                    key,
+                    value: to_value(value, datatype)?,
                 }
-            }
-            "delete" => {
-                if command.len() != 2 {
-                    return Err(RorError::ParameterError("delete".to_string()));
-                }
-                let op = OperateRequest::Delete {key: command[1].to_string()};
-                let result = self.client.operate(op)?;
-                Self::match_op_reply(result);
-            }, 
-            "compact" => {
-                if command.len() != 1 {
-                    return Err(RorError::ParameterError("compact".to_string()));
-                }
-                let op = OperateRequest::Compact;
-                let result = self.client.operate(op)?;
-                Self::match_op_reply(result);
             },
-            "get" => {
-                if command.len() != 2 {
-                    return Err(RorError::ParameterError("get".to_string()));
+            Statement::Delete { key } => OperateRequest::Delete { key },
+            Statement::Get { key } => OperateRequest::Get { key },
+            Statement::Compact => OperateRequest::Compact,
+            Statement::TypeOf { key } => OperateRequest::GetType { key },
+            Statement::Open { file: _ } => return Ok(()),
+            Statement::List { list: _ } => return Ok(()),
+            Statement::User { cmd } => {
+                match cmd {
+                    UserCmd::Create { info } => {
+                        OperateRequest::CreateUser {
+                            name: info.name,
+                            password: info.password,
+                            level: info.level,
+                        }  
+                    },
+                    UserCmd::Delete { name } => {
+                        OperateRequest::DeleteUser { name }
+                    }
                 }
-                let op = OperateRequest::Get {key: command[1].to_string()};
-                let value = match self.client.operate(op)? {
-                    OperateResult::Found(v) => v,
-                    OperateResult::PermissionDenied => {
-                        println!("Permission Denied\n");
-                        return Ok(());
-                    }
-                    OperateResult::KeyNotFound => {
-                        println!("Key not found: {0}\n", command[1]);
-                        return Ok(());
-                    }
-                    OperateResult::Failure => {
-                        println!("The request failed, possibly due to a server error\n");
-                        return Ok(());
-                    }
-                    _ => return Ok(()),
-                };
-
-                let str_value = match value {
-                    Value::Null => "Null".to_string(),
-                    Value::String(v) => v,
-                    Value::Bool(v) => v.to_string(),
-                    Value::Int32(v) => v.to_string(),
-                    Value::Int64(v) => v.to_string(),
-                    Value::Float32(v) => v.to_string(),
-                    Value::Float64(v) => v.to_string(),
-                    Value::Char(v) => {
-                        let mut string = String::new();
-                        for c in v {
-                            string.push(c);
-                        }
-                        string
-                    }
-                };
-                println!("{}\n",str_value);
             },
-            "typeof"  => {
-                if command.len() != 2 {
-                    return Err(RorError::ParameterError("get".to_string()));
-                }
-                let op = OperateRequest::GetType {key: command[1].to_string()};
-                let result = self.client.operate(op)?;
-                Self::match_op_reply(result);
-            },
-            "user" => {
-                if command[1] == "create" {
-                    if command.len() != 5 {
-                        return Err(RorError::ParameterError("create user".to_string()));
-                    }
-                    let op = OperateRequest::CreateUser {
-                        username: command[2].to_string(),
-                        password: command[3].to_string(),
-                        level: command[4].to_string(),
-                    };
-                    let result = self.client.operate(op)?;
-                    Self::match_op_reply(result);
-                }
-            }
-            "quit" => {
+            Statement::Quit => {
                 let _ = self.client.operate(OperateRequest::Quit);
                 quit_program();
+                return Ok(())
             }
-            _ => return Err(RorError::UnknownCommand(command[0].to_string())),
-        }
+        };
+        let result = self.client.operate(op)?;
+        Self::match_op_reply(result);
         Ok(())
     }
+
     fn match_op_reply(result: OperateResult) {
         match result {
             OperateResult::Found(_) => (),
@@ -393,6 +223,7 @@ impl RemoteRepl {
             OperateResult::Failure => println!("The request failed, possibly due to a server error\n"),
         }
     }
+
     fn reconnect(&mut self) -> Result<()> {
         let info = self.info.clone();
         self.client = Client::connect(
@@ -404,6 +235,61 @@ impl RemoteRepl {
         )?;
         Ok(())
     }
+}
+
+fn to_value(v: ValueP, data_type: ValueType) -> Result<Value> {
+    let value = match data_type {
+        ValueType::Null => Value::Null,
+        ValueType::Bool => {
+            if let ValueP::Bool(b) = v {
+                Value::Bool(b);
+            }
+            return Err(RorError::ConvertError(v.get_str(), data_type));
+        },
+        ValueType::Int32 => {
+            if let Ok(c) = v.get_str().parse::<i32>() {
+                Value::Int32(c);
+            }
+            return Err(RorError::ConvertError(v.get_str(), data_type));
+        }
+        ValueType::Int64 => {
+            if let Ok(c) = v.get_str().parse::<i64>() {
+                Value::Int64(c);
+            }
+            return Err(RorError::ConvertError(v.get_str(), data_type));
+        }
+        ValueType::Float32 => {
+            if let Ok(c) = v.get_str().parse::<f32>() {
+                Value::Float32(c);
+            }
+            return Err(RorError::ConvertError(v.get_str(), data_type));
+        }
+        ValueType::Float64 => {
+            if let Ok(c) = v.get_str().parse::<f64>() {
+                Value::Float64(c);
+            }
+            return Err(RorError::ConvertError(v.get_str(), data_type));
+        }
+        ValueType::Char => {
+            match v.get_str().parse::<char>() {
+                Ok(c) => Value::Char(c),
+                Err(_) => return Err(RorError::ConvertError(v.get_str(), data_type)),
+            }
+        },
+        ValueType::String => Value::String(v.get_str()),
+        ValueType::Array(ref include_type) => {
+            if let ValueP::Array(array) = v.clone() {
+                let mut values = Vec::new();
+                for i in array.iter() {
+                    values.push(to_value(i.clone(), *(include_type.clone()))?);
+                }
+                Value::Array(Box::new(values));
+            }
+            return Err(RorError::ConvertError(v.get_str(), data_type));
+        }
+    };
+
+    Ok(value)
 }
 
 fn output_prompt(content: &str) {

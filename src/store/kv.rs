@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     io::{
         BufWriter, 
         BufReader,
@@ -28,7 +29,8 @@ pub enum Value {
     Float32(f32),
     Float64(f64),
     String(String),
-    Char(Vec<char>),
+    Char(char),
+    Array(Box<Vec<Value>>)
 }
 
 #[derive(Serialize, Deserialize, PartialEq,Debug)]
@@ -125,8 +127,9 @@ impl DataStore {
         (result.index, result.uncompacted) = result.load_hashmap()?;
         Ok(result)
     }
-    pub fn get(&mut self, key: &str) -> Result<Value> {
-        match self.read(&key.to_string()) {
+
+    pub fn get(&mut self, key: String) -> Result<Value> {
+        match self.read(&key) {
             Ok(entry) => {
                 return Ok(entry.value);
             },
@@ -134,6 +137,7 @@ impl DataStore {
             Err(e) => return Err(e),
         }
     }
+
     pub fn get_all_value(&mut self) -> Result<Vec<Value>> {
         let mut data: Vec<Value> = Vec::new();
         let mut offset_vec: Vec<u64> = Vec::new();
@@ -149,6 +153,7 @@ impl DataStore {
         }
         return Ok(data);
     }
+
     pub fn get_all_entry(&mut self) -> Result<Vec<Entry>> {
         let mut data: Vec<Entry> = Vec::new();
         let mut offset_vec: Vec<u64> = Vec::new();
@@ -161,25 +166,25 @@ impl DataStore {
         }
         return Ok(data);
     }
-    pub fn add(&mut self, key: &str, value: Value) -> Result<()> {
+
+    pub fn add(&mut self, key: String, value: Value) -> Result<()> {
         let value_size: usize = bincode::serialize(&value)?.len();
-        let string_key = key.to_string();
-        let entry = Entry::add(string_key.clone(), value, value_size);
+        let entry = Entry::add(key.clone(), value, value_size);
         let size = self.write(&entry)? as u64;
         self.file_writer.flush()?;
-        if let Some(pos) = self.index.get(&string_key) {
+        if let Some(pos) = self.index.get(&key) {
             let last_invalid_entry = self.read_with_offset(*pos)?;
             self.uncompacted += last_invalid_entry.size() as u64;
         }
-        self.index.insert(string_key, self.position - size);
+        self.index.insert(key, self.position - size);
         Ok(())
     }
-    pub fn delete(&mut self, key: &str) -> Result<()> {
-        let string_key = key.to_string();
-        if let Some(pos) = self.index.get(&string_key) {
+    
+    pub fn delete(&mut self, key: String) -> Result<()> {
+        if let Some(pos) = self.index.get(&key) {
             let invalid_add_entry = self.read_with_offset(*pos)?;
-            self.index.remove(&string_key);
-            let entry = Entry::delete(string_key);
+            self.index.remove(&key);
+            let entry = Entry::delete(key);
             let size = self.write(&entry)?;
             self.file_writer.flush()?;
             self.uncompacted += size;
@@ -187,8 +192,9 @@ impl DataStore {
 
             return Ok(());
         }
-        Err(KvError::KeyNotFound(string_key))
+        Err(KvError::KeyNotFound(key))
     }
+
     pub fn compact(&mut self) -> Result<()> {
         let new_filename = self.path.clone() + ".compact";
         let mut new_file_writer = BufWriter::new(OpenOptions::new().write(true).create(true).open(new_filename.clone())?);
@@ -222,6 +228,7 @@ impl DataStore {
         self.index = new_hashmap;
         Ok(())
     }
+
     pub fn type_of(value: Value) -> String {
         return match value {
             Value::Null => "Null".to_string(),
@@ -232,8 +239,10 @@ impl DataStore {
             Value::Float64(_) => "Double".to_string(),
             Value::String(_) => "String".to_string(),
             Value::Char(_) => "Char".to_string(),
+            Value::Array(_) => "Array".to_string(),
         }
     }
+
     fn load_hashmap(&mut self) -> Result<(HashMap<String, u64>, u64)> {
         let mut offset = 0;
         let mut new_hashmap: HashMap<String, u64> = HashMap::new();
@@ -261,6 +270,7 @@ impl DataStore {
         }
         Ok((new_hashmap,uncompacted))
     }
+
     fn write(&mut self, entry: &Entry) -> Result<u64> {
         if self.uncompacted >= COMPACTION_THRESHOLD {
             self.compact()?;
@@ -271,12 +281,14 @@ impl DataStore {
         self.file_writer.write(&buf)?;
         Ok(size)
     }
+
     fn read(&mut self, key: &String) -> Result<Entry> {
         if let Some(offset) = self.index.get(key) {
             return self.read_with_offset(*offset);
         }
         Err(KvError::KeyNotFound(key.to_string()))
     }
+
     fn read_with_offset(&mut self, offset: u64) -> Result<Entry> {
         self.file_reader.seek(SeekFrom::Start(offset))?;
         let mut entry_buf: [u8; ENTRY_META_SIZE] = [0; ENTRY_META_SIZE];
@@ -321,5 +333,21 @@ impl DataStore {
             },
             Err(e) => Err(e),
         };
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Null => write!(f, "null"),
+            Value::String(v) => write!(f, "{}", v),
+            Value::Bool(v) => write!(f, "{}", v),
+            Value::Int32(v) => write!(f, "{}", v),
+            Value::Int64(v) => write!(f, "{}", v),
+            Value::Float32(v) => write!(f, "{}", v),
+            Value::Float64(v) => write!(f, "{}", v),
+            Value::Char(v) => write!(f, "{}", v),
+            Value::Array(v) => write!(f, "{:?}", v),
+        }
     }
 }
