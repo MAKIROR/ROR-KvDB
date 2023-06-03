@@ -75,6 +75,8 @@ impl StringExt for String {
             "(" => Some(Symbol::LeftParen),
             ")" => Some(Symbol::RightParen),
             ";" => Some(Symbol::Semicolon),
+            "[" => Some(Symbol::LeftBracket),
+            "]" => Some(Symbol::RightBracket),
             _ => None,
         }
     }

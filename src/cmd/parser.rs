@@ -46,6 +46,7 @@ impl Parser {
         match_token(&self.iter.next(), Token::Command(Command::Add))?;
         let key = self.parse_key()?;
         let datatype = self.parse_datatype()?;
+        
         let value = match datatype {
             ValueType::Array(_) => self.parse_array()?,
             _ => self.parse_value()?
@@ -69,7 +70,7 @@ impl Parser {
                 match_token(&self.iter.next(), Token::Symbol(Symbol::LeftParen))?;
                 let include_type = Box::new(self.parse_datatype()?);
                 match_token(&self.iter.next(), Token::Symbol(Symbol::RightParen))?;
-                ValueType::Array(include_type)
+                return Ok(ValueType::Array(include_type));
             },
             _ => return Ok(ValueType::String),
         };
@@ -194,8 +195,9 @@ impl Parser {
             match self.iter.peek() {
                 Some(Token::Symbol(Symbol::RightBracket)) => break,
                 Some(_) => (),
-                _ => return Err(CmdError::MissingValue),
+                None => return Err(CmdError::MissingValue),
             }
+            
             if let Ok(v) = self.parse_value() {
                 array.push(v);
                 if let Some(Token::Symbol(Symbol::Comma)) = self.iter.peek() {

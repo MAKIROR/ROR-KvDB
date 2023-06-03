@@ -247,28 +247,28 @@ fn to_value(v: ValueP, data_type: ValueType) -> Result<Value> {
             return Err(RorError::ConvertError(v.get_str(), data_type));
         },
         ValueType::Int32 => {
-            if let Ok(c) = v.get_str().parse::<i32>() {
-                Value::Int32(c);
+            match v.get_str().parse::<i32>() {
+                Ok(c) => Value::Int32(c),
+                Err(_) => return Err(RorError::ConvertError(v.get_str(), data_type)),
             }
-            return Err(RorError::ConvertError(v.get_str(), data_type));
         }
         ValueType::Int64 => {
-            if let Ok(c) = v.get_str().parse::<i64>() {
-                Value::Int64(c);
+            match v.get_str().parse::<i64>() {
+                Ok(c) => Value::Int64(c),
+                Err(_) => return Err(RorError::ConvertError(v.get_str(), data_type)),
             }
-            return Err(RorError::ConvertError(v.get_str(), data_type));
         }
         ValueType::Float32 => {
-            if let Ok(c) = v.get_str().parse::<f32>() {
-                Value::Float32(c);
+            match v.get_str().parse::<f32>() {
+                Ok(c) => Value::Float32(c),
+                Err(_) => return Err(RorError::ConvertError(v.get_str(), data_type)),
             }
-            return Err(RorError::ConvertError(v.get_str(), data_type));
         }
         ValueType::Float64 => {
-            if let Ok(c) = v.get_str().parse::<f64>() {
-                Value::Float64(c);
+            match v.get_str().parse::<f64>() {
+                Ok(c) => Value::Float64(c),
+                Err(_) => return Err(RorError::ConvertError(v.get_str(), data_type)),
             }
-            return Err(RorError::ConvertError(v.get_str(), data_type));
         }
         ValueType::Char => {
             match v.get_str().parse::<char>() {
@@ -281,11 +281,13 @@ fn to_value(v: ValueP, data_type: ValueType) -> Result<Value> {
             if let ValueP::Array(array) = v.clone() {
                 let mut values = Vec::new();
                 for i in array.iter() {
-                    values.push(to_value(i.clone(), *(include_type.clone()))?);
+                    let db_value = to_value(i.clone(), *(include_type.clone()))?;
+                    values.push(db_value);
                 }
-                Value::Array(Box::new(values));
+                Value::Array(Box::new(values))
+            } else {
+                return Err(RorError::ConvertError(v.get_str(), data_type));
             }
-            return Err(RorError::ConvertError(v.get_str(), data_type));
         }
     };
 
