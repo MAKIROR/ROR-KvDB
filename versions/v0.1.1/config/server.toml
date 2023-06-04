@@ -6,4 +6,4 @@ timeout = 300
 repl = true
 local_user = "root@123456"
 default_db = "default.data"
-auto_fresh = 20
+auto_refresh = 20

@@ -18,20 +18,29 @@ start command:
 ```
 rdb local -p [optional:data file path]
 ```
-### Commands
-Start database and you can use these commands:
+### Supported commands
+Start database and you can use database with commands.
+
+#### Commands for Database
 
 ```
 open [data file path]
-add [key] [value] [optional: type of data]
+add [optional: type of data] [key] [value]
 delete [key]
 get [key]
 list [values/entries]
 typeof [key]
 compact
-user create [username] [password] [level]
 quit
 ```
+
+#### Commands for User
+
+```
+user create [username] [password] [level]
+    | delete [username]
+```
+
 <br>
 
 
@@ -87,21 +96,31 @@ rdb connect -i 127.0.0.1 -p 11451 -u makiror@123456 -f test.data
 When you start connect without parameters, it will ask you to enter these after the program starts.
 <br>
 
-### Commands 
+### Supported commands
 The user's level determines which commands can be used.
+
+
 ```
 get [key] (all)
 typeof [key] (all)
-add [key] [value] [optional: type of data] (level 2-4)
+add [optional: type of data] [key] [value] (level 2-4)
 delete [key] (level 3-4)
 compact (level 2-4)
-user create [username] [password] [level] (level 4)
 quit (all)
 ```
 
-  But in this mode, only the result of the operation will be displayed after the operation, and there will be no detailed output like the local mode.
+#### Commands for User
 
-  The path of the data file is [server preset path + parameter]. If the parameter has no folder but only the file name, the file will be create automatically.
+```
+user create [username] [password] [level] (level 4)
+    | delete [username] (level 4)
+```
+
+But in this mode, only the result of the operation will be displayed after the operation, and there will be no detailed output like the local mode.
+
+> Since the data file corresponding to a client is allocated when the connection is established, it will be troublesome to redirect the data file to support the open command, so this version does not support command 'open'.
+
+The path of the data file is [server preset path + parameter]. If the parameter has no folder but only the file name, the file will be create automatically.
 
 #### example
 The server will automatically create this file:
@@ -125,7 +144,7 @@ Switch to another database, if the path is valid but the file does not exist, it
 
 ### Add
 ```
-add [key] [value] [optional: type of data]
+add [optional: type of data] [key] [value]
 ```
 These data types are currently supported, and you can express it with these names:
 | Type | Data type in Rust | Express |
@@ -137,9 +156,25 @@ These data types are currently supported, and you can express it with these name
 | Float32 | f32 | float / f32 |
 | Float64 | f64 | double / f64 |
 | String | String | string |
-| Char | Vec\<char> | char |
+| Char | char | char |
+| Array | Vec\<DataType> | char |
 
 If you don't specify a type, whatever it is will be treated as a String type.
+
+* In the current version, ROR Database already supports the recursive type Array, which can be expressed like this on the command line:
+
+```
+add array(string) group [makiror,aaron,adonis]
+```
+
+Use parentheses for included datatype, so you can also define recursive types like this:
+```
+add array(array(string)) group [[little cat, cute], [sweet potato, lovely], [brown dog, handsome]]
+```
+```
+test > get group
+Array([Array([String("cat"), String("cute")]), Array([String("potato"), String("lovely")]), Array([String("dog"), String("handsome")])])
+```
 
 #### Example:
 ```
@@ -187,6 +222,7 @@ Print the type of Key-Value data.
 | double / i64 | Double |
 | string | String |
 | char | Char |
+| array | Array |
 
 ### list
 ```
@@ -210,21 +246,22 @@ When you use two 'add' successively to modify the data corresponding to the same
 | add("age", 17) | true |
 | delete("age") | true |
 
-This form just a concept, the actual Uncompacted is not expressed in this form. When a data file, Uncompacted data size exceeds 1KB, the database will automatically perform compact.    
+This form just a concept, the actual Uncompacted is not expressed in this form. When a data file uncompacted data size exceeds 1KB, the database will automatically perform compact.    
 After the above table is compacted, it will become like this:
 | DataFile | Uncompacted  |
 | :----: | :----: |
 | add("name","Aaron") | false |
 
-Look! Invalid data is cleaned up!
+Invalid data is cleaned up.
 
 ### Quit
 ```
 quit
 ```
 
-### Update plan
-+ Basic syntax analysis support (next version)
-+ recursive datatype (next version)
-+ Basic expression support
-+ Conditional expression query
+###  User
+Register or delete user
+```
+user create [username] [password] [level]
+    | delete [username]
+```

@@ -44,8 +44,8 @@ impl Parser {
 
     fn parse_add(&mut self) -> Result<Statement> {
         match_token(&self.iter.next(), Token::Command(Command::Add))?;
-        let key = self.parse_key()?;
         let datatype = self.parse_datatype()?;
+        let key = self.parse_key()?;
         
         let value = match datatype {
             ValueType::Array(_) => self.parse_array()?,
@@ -181,6 +181,19 @@ impl Parser {
             Some(Token::Identifier(s)) => ValueP::Identifier(s.clone()),
             Some(Token::Number(n)) => ValueP::Number(n.clone()),
             Some(Token::Bool(b)) => ValueP::Bool(*b),
+            Some(Token::Symbol(Symbol::LeftParen)) => {
+                self.iter.next();
+                let next_value = self.parse_value()?;
+                return match self.iter.next() {
+                    Some(Token::Symbol(Symbol::RightParen)) => Ok(next_value),
+                    _ => Err(CmdError::MissingToken(Token::Symbol(Symbol::RightParen))),
+                };
+            },
+            Some(Token::Symbol(Symbol::LeftBracket)) => {
+                self.iter.next();
+                let next_value = self.parse_array()?;
+                return Ok(next_value);
+            }
             _ => return Err(CmdError::MissingValue),
         };
         self.iter.next();
