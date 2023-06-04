@@ -105,7 +105,7 @@ impl Server {
         let mut accepted_times = 0;
 
         loop {
-            if self.config.auto_fresh > 0 && accepted_times >= self.config.auto_fresh {
+            if self.config.auto_refresh > 0 && accepted_times >= self.config.auto_refresh {
                 output_prompt("The server starts to refresh automatically...");
                 self.refresh()?;
                 output_prompt("Done!");
@@ -477,7 +477,7 @@ struct Config {
     repl: bool,
     local_user: String,
     default_db: String,
-    auto_fresh: u32,
+    auto_refresh: u32,
 }
 
 impl Config {
@@ -491,7 +491,7 @@ impl Config {
             repl: false,
             local_user: String::new(),
             default_db: String::new(),
-            auto_fresh: 20,
+            auto_refresh: 20,
         }
     }
     pub fn get_server() -> Result<Self> {

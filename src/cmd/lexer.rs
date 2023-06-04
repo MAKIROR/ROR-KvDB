@@ -44,6 +44,8 @@ pub fn lex(text: &str) -> Vec<Token> {
                     tokens.push(Token::Command(command));
                 } else if let Some(datatype) = text.as_datatype() {
                     tokens.push(Token::DataType(datatype));
+                } else if let Some(arg) = text.as_arg() {
+                    tokens.push(Token::Arg(arg));
                 } else if let Some(bool) = text.as_bool() {
                     tokens.push(Token::Bool(bool));
                 } else {
