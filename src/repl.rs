@@ -59,7 +59,7 @@ impl LocalRepl {
             },
             Statement::Get { key } => {
                 let value = self.database.get(key)?;
-                println!("{:?}\n", value);
+                println!("{}\n", value);
             },
             Statement::Compact => {
                 self.database.compact()?;
@@ -73,11 +73,19 @@ impl LocalRepl {
                 match list {
                     List::Values => {
                         let data = self.database.get_all_value()?;
-                        println!("{:?}\n", data);
+                        let mut s = String::new();
+                        for value in data {
+                            s = format!("{}\n{}", s, value);
+                        }
+                        println!("{}\n", s);
                     },
                     List::Entries => {
                         let data = self.database.get_all_entry()?;
-                        println!("{:?}\n", data);
+                        let mut s = String::new();
+                        for entry in data {
+                            s = format!("{}\n{}", s, entry);
+                        }
+                        println!("{}\n", s);
                     }
                 }
             },
