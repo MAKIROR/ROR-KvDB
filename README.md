@@ -1,5 +1,7 @@
 # ROR-KvDB
 A simple Key–Value Database.   
+This is the develop branch.
+[release version branch](https://github.com/MAKIROR/ROR-KvDB/tree/release)
 
 ## Tutorial Blog (Chinese Only) :    
 <a href="https://github.com/MAKIROR/Makiror_Articles/blob/main/articles_zh_cn/Rust/Make_a_simple_KV_database_with_Rust/Part1.md" target="_blank">Part 1: Basic Storage Functions</a></br>
