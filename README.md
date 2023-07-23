@@ -1,6 +1,7 @@
 # ROR-KvDB
 A simple Key–Value Database.   
-This is the develop branch.
+It is characterized by the realization of high-speed IO of a large amount of data based on the theory of Bitcask. \
+Here is the develop branch.
 [release version branch](https://github.com/MAKIROR/ROR-KvDB/tree/release)
 
 ## Tutorial Blog (Chinese Only) :    
