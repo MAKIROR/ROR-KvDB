@@ -39,6 +39,11 @@ pub struct Server {
     clients: HashMap<String, (String, JoinHandle<()>)>,
 }
 
+enum DataPath {
+    Exists(Arc<Mutex<DataStore>>),
+    None,
+}
+
 impl Server {
     pub fn new() -> Self {
         let config: Config = match Config::get_server() {
@@ -73,7 +78,7 @@ impl Server {
     }
 
     pub fn start(&mut self) -> Result<()> {
-        let address = format!("{0}:{1}", self.config.ip,&self.config.port);
+        let address = format!("{0}:{1}", self.config.ip, &self.config.port);
         let listener = TcpListener::bind(address.clone())?;
         User::test_file()?;
 
@@ -143,22 +148,22 @@ impl Server {
         let head: ConnectRequest = match bincode::deserialize(&head_buffer) {
             Ok(buf) => buf,
             Err(e) => {
-                Self::send_error(stream, ConnectError::RequestError)?;
+                Self::send_error(&mut stream, ConnectError::RequestError)?;
                 return Err(RorError::BincodeError(e));
             },
         };
         let user = match User::login(head.user_name,head.password) {
             Ok(u) => u,
             Err(UserError::UserNotFound(n)) => {
-                Self::send_error(stream, ConnectError::UserNotFound)?;
+                Self::send_error(&mut stream, ConnectError::UserNotFound)?;
                 return Err(RorError::UserError(UserError::UserNotFound(n)));
             },
             Err(UserError::WrongPassWord) => {
-                Self::send_error(stream, ConnectError::PasswordError)?;
+                Self::send_error(&mut stream, ConnectError::PasswordError)?;
                 return Err(RorError::UserError(UserError::WrongPassWord));
             },
             Err(e) => {
-                Self::send_error(stream, ConnectError::ServerError)?;
+                Self::send_error(&mut stream, ConnectError::ServerError)?;
                 return Err(RorError::UserError(e));
             }
         };
@@ -168,7 +173,7 @@ impl Server {
         let db_path = match db_path_buf.into_os_string().into_string() {
             Ok(s) => s,
             Err(_) => {
-                Self::send_error(stream, ConnectError::PathError)?;
+                Self::send_error(&mut stream, ConnectError::PathError)?;
                 return Err(RorError::PathError);
             },
         };
@@ -177,7 +182,7 @@ impl Server {
             Ok(s) => s,
             Err(e) => {
                 output_prompt(format!("[{0}] The reader cannot be created by the clone method, and the client is disconnected", &address));
-                Self::send_error(stream, ConnectError::ServerError)?;
+                Self::send_error(&mut stream, ConnectError::ServerError)?;
                 return Err(RorError::IOError(e));
             }
         };
@@ -188,40 +193,20 @@ impl Server {
             File::create(&db_path)?;
         }
 
-        for (key, db) in &self.dbs {
-            let exists = match is_same_file(&key, &db_path) {
-                Ok(b) => b,
-                Err(e) => {
-                    Self::send_error(stream, ConnectError::ServerError)?;
-                    return Err(RorError::IOError(e));
-                },
-            };
-            if exists {
-                let opened_db = Arc::clone(db);
-                if let Err(e) = Self::send_reply(&mut stream){
-                    stream.shutdown(Shutdown::Both)?;
-                    return Err(e);
-                }
-                let client = Client {
-                    stream,
-                    reader,
-                    db: opened_db,
-                    level: user.level,
-                    address,
-                    timeout: 0,
-                    set_timeout: self.config.timeout.clone(),
+        let opened_db = match self.compare(db_path.clone(), &mut stream)? {
+            DataPath::Exists(db) => db,
+            DataPath::None => {
+                let db = match self.open_new_db(db_path.clone()) {
+                    Ok(db) => db,
+                    Err(e) => {
+                        Self::send_error(&mut stream, ConnectError::OpenFileError)?;
+                        return Err(e);
+                    },
                 };
-                self.new_client(client, key.clone());
-                return Ok(())
+                db
             }
-        }
-        let opened_db = match self.open_new_db(db_path.clone()) {
-            Ok(db) => db,
-            Err(e) => {
-                Self::send_error(stream, ConnectError::OpenFileError)?;
-                return Err(e);
-            },
         };
+
         if let Err(e) = Self::send_reply(&mut stream) {
             stream.shutdown(Shutdown::Both)?;
             return Err(e);
@@ -265,13 +250,14 @@ impl Server {
         let thread_handle = thread::spawn(move || {
             client.handle_client();
         });
+
         let _ = &self.clients.insert(
             address,
             (datafile_index, thread_handle)
         );
     }
 
-    fn send_error(mut stream: TcpStream, err: ConnectError) -> Result<()> {
+    fn send_error(stream: &mut TcpStream, err: ConnectError) -> Result<()> {
         let (buf, _) = Message::new(err).as_bytes()?;
         stream.write(&buf.as_slice())?;
         stream.shutdown(Shutdown::Both)?;
@@ -294,7 +280,25 @@ impl Server {
         self.dbs.insert( path.clone(), db );
         Ok(arc_clone_db)
     }
-}
+
+    fn compare(&mut self, path: String, stream: &mut TcpStream) -> Result<DataPath> {
+        for (key, db) in &self.dbs {
+            let exists = match is_same_file(&key, &path) {
+                Ok(b) => b,
+                Err(e) => {
+                    Self::send_error(stream, ConnectError::ServerError)?;
+                    return Err(RorError::IOError(e));
+                },
+            };
+            if exists {
+                let opened_db = Arc::clone(&db);
+                return Ok(DataPath::Exists(opened_db));
+            }
+        }
+        return Ok(DataPath::None)
+    }
+
+} 
 
 pub struct Client {
     stream: TcpStream,
