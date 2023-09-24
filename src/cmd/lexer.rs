@@ -8,6 +8,8 @@ use super::{
 pub fn lex(text: &str) -> Vec<Token> {
     let mut tokens: Vec<Token> = Vec::new();
     let mut chars = text.chars().peekable();
+    let mut has_cmd = false;
+    let mut has_arg = false;
 
     while let Some(&token) = chars.peek() {
         match token {
@@ -41,11 +43,20 @@ pub fn lex(text: &str) -> Vec<Token> {
             _ => {
                 let text = collect_until(&mut chars, |c| !c.is_alphanumeric() && c != '_' );
                 if let Some(command) = text.as_command() {
-                    tokens.push(Token::Command(command));
+                    if !has_cmd {
+                        tokens.push(Token::Command(command));
+                        has_cmd = true;
+                    } else {
+                        tokens.push(Token::Identifier(text));
+                    }
                 } else if let Some(datatype) = text.as_datatype() {
                     tokens.push(Token::DataType(datatype));
                 } else if let Some(arg) = text.as_arg() {
-                    tokens.push(Token::Arg(arg));
+                    if !has_arg {
+                        tokens.push(Token::Arg(arg));
+                    } else {
+                        tokens.push(Token::Identifier(text));
+                    }
                 } else if let Some(bool) = text.as_bool() {
                     tokens.push(Token::Bool(bool));
                 } else {

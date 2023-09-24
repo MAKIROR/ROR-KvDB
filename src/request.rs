@@ -31,6 +31,7 @@ pub enum ConnectError {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum OperateRequest {
+    Open { path: String },
     Get { key: String },
     Add { key: String, value: Value },
     Delete { key: String },

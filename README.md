@@ -139,6 +139,7 @@ rdb connect -i 127.0.0.1 -p 11451 -u makiror@123456 -f test/test.data
 
 ## Commands
 Detailed Explanation of Database Commands.
+
 ### Open
 ```
 open [data file path]

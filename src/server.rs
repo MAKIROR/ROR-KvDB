@@ -84,6 +84,7 @@ impl Server {
 
         output_prompt(format!("Server start: {}", address));
 
+        
         if self.config.repl {
             output_prompt(format!("Connect to local server in REPL mode, user: {}", &self.config.local_user));
 
@@ -106,6 +107,10 @@ impl Server {
                 repl.run();
             });
         }
+
+        std::thread::spawn( || {
+
+        });
 
         let mut accepted_times = 0;
 
@@ -382,6 +387,9 @@ impl Client {
 
     fn match_command(&mut self, command: OperateRequest) -> Result<OperateResult> {
         match command {
+            OperateRequest::Open { path } => {
+                todo!()
+            }
             OperateRequest::Get { key } => {
                 match self.db.lock().unwrap().get(key) {
                     Ok(v) => {
