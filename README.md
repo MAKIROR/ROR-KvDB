@@ -46,7 +46,6 @@ user create [username] [password] [level]
 
 <br>
 
-
 ## Server mode
 Start a remote kv database that can accept client connections.
 
@@ -139,6 +138,30 @@ rdb connect -i 127.0.0.1 -p 11451 -u makiror@123456 -f test/test.data
 
 ## Commands
 Detailed Explanation of Database Commands.
+
+### Disambiguation
+
+If you need to insert content that duplicates type keywords like "int" or "string" in places such as keys/values, it is necessary to use quotes in the command for disambiguation. Even though commands, keywords, or parameters like "add" and "user" are processed, it is still recommended to use disambiguation, for example:
+
+```
+add int "user" 114514 //'user' is key
+or
+add string "string" hey
+```
+
+If the sentence contains spaces, it's also necessary to use quotes to represent it as a whole.
+
+```
+add string "string" "THIS IS A STRING"
+```
+
+In this program's syntax convention, parentheses represent a sub-expression, while quotes are used to denote the entirety of a literal when dealing with spaces. Therefore, using parentheses to represent a complete literal, like this, is not allowed:
+
+```
+add string "string" (THIS IS A STRING)
+```
+
+<br>
 
 ### Open
 ```
