@@ -141,7 +141,7 @@ Detailed Explanation of Database Commands.
 
 ### Disambiguation
 
-If you need to insert content that duplicates type keywords like "int" or "string" in places such as keys/values, it is necessary to use quotes in the command for disambiguation. Even though commands, keywords, or parameters like "add" and "user" are processed, it is still recommended to use disambiguation, for example:
+If you need to insert content that duplicates type keywords like "int" or "string" in places such as keys/values, It is necessary to use quotes in the command for disambiguation. for example:
 
 ```
 add int "user" 114514 //'user' is key
